@@ -5,47 +5,29 @@ Created on Wed May 13 13:59:31 2020
 @author: bernifoellmer
 """
 
+sys.path.append('H:/cloud/cloud_data/Projects/DL/Code/src')
+sys.path.append('H:/cloud/cloud_data/Projects/DL/Code/src/ct')
 import sys, os
 import pandas as pd
-import openpyxl
 import ntpath
 import datetime
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.styles import Font, Color, Border, Side
-from openpyxl.styles import colors
 from openpyxl.styles import Protection
 from openpyxl.styles import PatternFill
 from glob import glob
 from shutil import copyfile
-from cta import update_table
-from discharge_extract import extract_specific_tags_df
-from discharge_ncs import discharge_ncs
 import numpy as np
 from collections import defaultdict
-from ActiveLearner import ActiveLearner, DISCHARGEFilter
-from featureSelection import featureSelection
 from openpyxl.utils import get_column_letter
-
-sys.path.append('H:/cloud/cloud_data/Projects/DL/Code/src')
-sys.path.append('H:/cloud/cloud_data/Projects/DL/Code/src/ct')
 from CTDataStruct import CTPatient
 import keyboard
-from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-from sklearn.ensemble import RandomForestClassifier
-from numpy.random import shuffle
 from openpyxl.styles.differential import DifferentialStyle
-from openpyxl import Workbook
-from openpyxl.styles import Color, PatternFill, Font, Border
-from openpyxl.styles.differential import DifferentialStyle
-from openpyxl.formatting.rule import ColorScaleRule, CellIsRule, FormulaRule
 from openpyxl.formatting import Rule
-from computeCTA import computeCTA
-from datetime import datetime
-
-from discharge_extract import extract_specific_tags
+from settings import initSettings, saveSettings, loadSettings, fillSettingsTags
+from classification import createRFClassification, initRFClassification
+from filterTenStepsGuide import filter_CACS_10StepsGuide, filter_CACS, filter_NCS, filterReconstruction, filter_CTA
 
 tags_dicom=['Count', 'Site', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID',
         'Modality', 'SeriesNumber', 'SeriesDescription', 'AcquisitionDate',
@@ -69,58 +51,9 @@ scanClasses = defaultdict(lambda:None,{'UNDEFINED': 0, 'CACS': 1, 'CTA': 2, 'NCS
 scanClassesInv = defaultdict(lambda:None,{0: 'UNDEFINED', 1: 'CACS', 2: 'CTA', 3: 'NCS_CACS', 4: 'NCS_CTA', 5: 'ICA', 6: 'OTHER'})
 scanClassesStr = '"' + 'UNDEFINED,' + 'CACS,' + 'CTA,' + 'NCS_CACS,' + 'NCS_CTA,' + 'ICA,' + 'OTHER' +'"'
 scanClassesManualStr = '"' + 'UNDEFINED,' + 'CACS,' + 'CTA,' + 'NCS_CACS,' + 'NCS_CTA,' + 'ICA,' + 'OTHER,' + 'PROBLEM,' + 'QUESTION,' +'"'
-recoClasses = ['FBP', 'IR', 'UNDEFINED']
+# recoClasses = ['FBP', 'IR', 'UNDEFINED']
 changeClasses = ['NO_CHANGE', 'SOURCE_CHANGE', 'MASTER_CHANGE', 'MASTER_SOURCE_CHANGE']
 
-def openMaster(folderpath_master, master_process=False):
-    print('Open master')
-    date = folderpath_master.split('_')[-1]
-    if master_process==False:
-        filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    else:
-        filepath_master_tmp = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-        folderpath, filename, file_extension = splitFilePath(filepath_master_tmp)
-        filepath_master = os.path.join(folderpath, filename + '_process' + file_extension)
-    os.system(filepath_master)
-
-def mergeSameCells(sheet, df_master, merge_column='PatientID'):
-    cols = list(df_master.columns)
-    column_df = cols.index(merge_column)
-    column_excel = column_df + 2
-    start_row = 2
-    for i in range(0, len(df_master)-1):
-        if not df_master.iloc[i, column_df] == df_master.iloc[i+1, column_df]:
-            end_row = i + 2
-            sheet.merge_cells( start_row=start_row, start_column=column_excel,end_row=end_row, end_column=column_excel)
-            start_row = end_row + 1
-    end_row = i + 2
-    sheet.merge_cells( start_row=start_row, start_column=column_excel,end_row=end_row, end_column=column_excel)
-
-def set_upper_border(sheet, df_master, merge_column='PatientID'):
-    cols = list(df_master.columns)
-    column_df = cols.index(merge_column)
-    column_excel = column_df + 2
-    thin = Side(border_style="thin", color="000000")
-    for i in range(0, len(df_master)-1):
-        if i % 100 == 0:
-            print('index:', i, '/', len(df_master))
-        if not df_master.iloc[i, column_df] == df_master.iloc[i+1, column_df]:
-            end_row = i + 2
-            for column in sheet.columns:
-                cell = column[end_row]
-                cell.border = Border(top=thin)
-            start_row = end_row + 1
-    end_row = i + 2
-    for column in sheet.columns:
-        cell = column[end_row]
-        cell.border = Border(top=thin)
-    # Set border for index
-    for i in range(0, len(df_master)-1):
-        end_row = i + 2  
-        column = sheet['A']
-        cell = column[end_row]
-        cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
-        
 def setColor(workbook, sheet, rows, NumColumns, color):
     for r in rows:
         if r % 100 == 0:
@@ -128,13 +61,8 @@ def setColor(workbook, sheet, rows, NumColumns, color):
         for c in range(1,NumColumns):
             cell = sheet.cell(r, c)
             cell.fill = PatternFill(start_color=color, end_color=color, fill_type = 'solid')
-            #cell.fill = PatternFill(fgColor=font_color, bgColor=bg_color)
-            #formatColor = workbook.add_format({'font_color': font_color, 'bg_color': bg_color})     
-            #sheet.conditional_format(first_row, first_col, last_row, last_col,{'type': 'no_blanks','format': formatColor})                  
 
 def setColorFormula(sheet, formula, color, colorrange):
-    #color_fill = PatternFill(bgColor=color)
-    #dxf = DifferentialStyle(fill=color_fill)
     dxf = DifferentialStyle(font=Font(color=color))
     r = Rule(type="expression", dxf=dxf, stopIfTrue=True)
     r.formula = [formula]
@@ -200,81 +128,7 @@ def splitFilePath(filepath):
     folderpath, filename = ntpath.split(head)
     return folderpath, filename, file_extension
 
-def filter_CACS_10StepsGuide(df_data):
-    df = df_data.copy()
-    df.replace(to_replace=[np.nan], value=0.0, inplace=True)
-    print('Apply filter_CACS_10StepsGuide')
-    df_CACS = pd.DataFrame(columns=['CACS10StepsGuide'])
-    for index, row in df.iterrows():
-        if index % 1000 == 0:
-            print('index:', index, '/', len(df))
-        criteria1 = row['ReconstructionDiameter'] <= 200
-        criteria2 = (row['SliceThickness']==3.0) or (row['SliceThickness']==2.5 and row['Site'] in ['P10', 'P13', 'P29'])
-        criteria3 = row['Modality'] == 'CT'
-        criteria4 = isNaN(row['ContrastBolusAgent'])
-        criteria5 = row['Count']>=30 and row['Count']<=90
-        result = criteria1 and criteria2 and criteria3 and criteria4 and criteria5
-        df_CACS = df_CACS.append({'CACS10StepsGuide': result}, ignore_index=True)
-    return df_CACS
-
-def filter_CACS_Extended(df_data):
-    print('Apply filter_CACS_Extended')
-    df_CACS = pd.DataFrame(columns=['CACSExtended'])
-    for index, row in df_data.iterrows():
-        if index % 1000 == 0:
-            print('index:', index, '/', len(df_data))
-        criteria1 = row['ReconstructionDiameter'] <= 300
-        criteria2 = (row['SliceThickness']==3.0) or (row['SliceThickness']==2.5 and row['Site'] in ['P10', 'P13', 'P29'])
-        criteria3 = row['Modality'] == 'CT'
-        criteria4 = isNaN(row['ContrastBolusAgent'])
-        criteria5 = row['Count']>=30 and row['Count']<=90
-        result = criteria1 and criteria2 and criteria3 and criteria4 and criteria5
-        df_CACS = df_CACS.append({'CACSExtended': result}, ignore_index=True)
-    return df_CACS
-
-def filter_NCS_Extended(df_data):
-    df = pd.DataFrame()
-    df_lung, df_body = discharge_ncs(df_data)
-    df['NCS_CACSExtended'] = df_lung
-    df['NCS_CTAExtended'] = df_body
-    return df
-
-def filterReconstruction(df_data):
-    print('Apply filterReconstruction123')
-    ir_description = ['aidr','id', 'asir','imr']
-    fbp_description = ['org','fbp']
-    ir_kernel = ['I20f','I26f','I30f', 'I31f','I50f', 'I70f']
-    fbp_kernel = []
-    df_reco = pd.DataFrame(columns=['CACSExtended'])
-    for index, row in df_data.iterrows():
-        if index % 1000 == 0:
-            print('index:', index, '/', len(df_data))
-        row['Modality'] == 'CT'
-        desc =  row['SeriesDescription']  
-        kernel =  row['ConvolutionKernel'] 
-        if isNaN(kernel):kernel=''
-       
-        # Check Cernel
-        isir = any(x.lower() in str(desc).lower() for x in ir_description) or any(x.lower() in str(kernel).lower() for x in ir_kernel)
-        isfbp = any(x.lower() in str(desc).lower() for x in fbp_description) or any(x.lower() in str(kernel).lower() for x in fbp_kernel)
-        if isfbp:
-            reco = recoClasses[0]
-        elif isir:
-            reco = recoClasses[1]
-        else:
-            reco = recoClasses[2]
-        df_reco = df_reco.append({'RECO': reco}, ignore_index=True)
-    return df_reco
-
-def filter_CTA_Extended(folderpath_master):
-    df_cta = computeCTA(folderpath_master)
-    df = pd.DataFrame()
-    df['phase'] = df_cta['CTA_phase']
-    df['arteries'] = df_cta['CTA_arteries']
-    df['source'] = df_cta['CTA_source']
-    df['CTAExtended'] = df_cta['CTAExtended']
-    df.fillna(value=np.nan, inplace=True)   
-    return df    
+ 
 
 def update_CACS_10StepsGuide(df_CACS, sheet):
     for index, row in df_CACS.iterrows():
@@ -283,8 +137,6 @@ def update_CACS_10StepsGuide(df_CACS, sheet):
         cell.value = row['CACS10StepsGuide']
         #cell.protection = Protection(locked=False)
     return sheet    
-
- 
 
 def mergeITT(df_ITT, df_data):
     # Merge ITT table   
@@ -463,150 +315,6 @@ def mergeStenosis_bigger_20_phase(df_stenosis_bigger_20_phases, df_data):
 
     return df_data
 
-def update_discharge_master(folderpath_discharge_master_sources, folderpath_discharge_master_data):
-    
-    #folderpath_discharge_master_sources = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_sources_20200401'
-    folderpath_discharge_master_sources = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_sources_20200501'
-        
-    #filepath_dicom = glob(folderpath_discharge_master_sources + '/*dicom*.xlsx')[0]
-    filepath_eCRF = glob(folderpath_discharge_master_sources + '/*_ecrf_*.xlsx')[0]
-    #filepath_eCRF01 = glob(folderpath_discharge_master_sources + '/*eCRF01*.xlsx')[0]
-    #filepath_eCRF02 = glob(folderpath_discharge_master_sources + '/*eCRF01*.xlsx')[0]
-    filepath_tracking = glob(folderpath_discharge_master_sources + '/*tracking*.xlsx')[0]
-    filepath_ITT = glob(folderpath_discharge_master_sources + '/*ITT*.xlsx')[0]
-    filepath_phase_exclude_stenosis = glob(folderpath_discharge_master_sources + '/*phase_exclude_stenosis*.xlsx')[0]
-    filepath_prct = glob(folderpath_discharge_master_sources + '/*prct*.xlsx')[0]
-    filepath_stenosis_bigger_20_phases = glob(folderpath_discharge_master_sources + '/*stenosis_bigger_20_phases*.xlsx')[0]
-    filepath_tags = glob(folderpath_discharge_master_sources + '/*tags*.xlsx')[0]
-    filepath_master_plus_ecrf = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_20200401/tmp/discharge_master_template.xlsx'
-    filepath_template = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_template/discharge_master_template.xlsx'
-    filepath_master_old = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_20200401/discharge_master_20200401.xlsx'
-    filepath_master = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_20200501/discharge_master_20200501.xlsx'
-    filepath_tags_tmp = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_20200501/tmp/discharge_tags_tmp.xlsx'
-    #df_data_new = create_discharge_master_merge(folderpath_discharge_master_sources, folderpath_discharge_master_data)
-    #df_data = df_data_new.copy()
-    
-    df_data_old = pd.read_excel(filepath_master_old, 'DATA', index_col=0)
-    
-    # Merge dicom
-    df_dicom = pd.read_excel(filepath_tags, 'linear', index_col=0)
-    df_dicom = df_dicom[tags_dicom]
-    #df_dicom = df_dicom[0:305]
-    df_data = mergeDicom(df_dicom, df_data_old)
-    
-    # Filter by CACS based on 10-Steps-Guide
-    df_CACS = filter_CACS_10StepsGuide(df_data)
-    df_CACS.rename(columns={'CACS10StepsGuide':'CACS10StepsGuide'}, inplace=True)
-    df_data['CACS10StepsGuide'] = df_CACS
-    
-    # Filter by CACS extended
-    df_CACS = filter_CACS_Extended(df_data)
-    df_CACS.rename(columns={'CACS10StepsGuide':'CACSExtended'}, inplace=True)
-    df_data['CACSExtended'] = df_CACS
-    
-    # Filter by CTA based on 10-Steps-Guide
-    df_CACS  = filter_CACS_10StepsGuide(df_data)
-    df_CACS.rename(columns={'CACS10StepsGuide':'CTA10StepsGuide'}, inplace=True)
-    df_data['CTA10StepsGuide'] = df_CACS
-    
-    # Filter by CTA extended
-    df_CACS  = filter_CACS_10StepsGuide(df_data)
-    df_CACS.rename(columns={'CACS10StepsGuide':'CTAExtended'}, inplace=True)
-    df_data['CTAExtended'] = df_CACS
-    
-    # Filter by NCS_CACS based on 10-Steps-Guide
-    df_CACS = filter_CACS_10StepsGuide(df_data)
-    df_CACS.rename(columns={'CACS10StepsGuide':'NCS_CACS10StepsGuide'}, inplace=True)
-    df_data['NCS_CACS10StepsGuide'] = df_CACS
-    
-    # Filter by CACS extended
-    df_CACS = filter_CACS_10StepsGuide(df_data)
-    df_CACS.rename(columns={'CACS10StepsGuide':'NCS_CACSExtended'}, inplace=True)
-    df_data['NCS_CACSExtended'] = df_CACS
-    
-    # Filter by CTA based on 10-Steps-Guide
-    df_CACS  = filter_CACS_10StepsGuide(df_data)
-    df_CACS.rename(columns={'CACS10StepsGuide':'NCS_CTA10StepsGuide'}, inplace=True)
-    df_data['NCS_CTA10StepsGuide'] = df_CACS
-    
-    # Filter by CTA extended
-    df_CACS  = filter_CACS_10StepsGuide(df_data)
-    df_CACS.rename(columns={'CACS10StepsGuide':'NCS_CTAExtended'}, inplace=True)
-    df_data['NCS_CTAExtended'] = df_CACS
-        
-    # Filter by ICA extended
-    df_CACS  = filter_CACS_10StepsGuide(df_data)
-    df_CACS.rename(columns={'CACS10StepsGuide':'ICA'}, inplace=True)
-    df_data['ICA'] = df_CACS
-
-    # Create Class 10StepGuide
-    df_CACS  = filter_CACS_10StepsGuide(df_data)
-    df_CACS.rename(columns={'CACS10StepsGuide':'CLASS10StepsGuide'}, inplace=True)
-    df_data['CLASS10StepsGuide'] = df_CACS
-
-    # Create Class Extended
-    df_CACS  = filter_CACS_10StepsGuide(df_data)
-    df_CACS.rename(columns={'CACS10StepsGuide':'CLASSExtended'}, inplace=True)
-    df_data['CLASSExtended'] = df_CACS
-    
-    # Create ClassManual
-    df_data['ClassManualCorrection'] = df_data_old['ClassManualCorrection']
-    
-    # Create ClassExtended
-    df_data['ClassExtended'] = df_data_old['ClassExtended']
-        
-    # Merge tracking table
-    df_tracking = pd.read_excel(filepath_tracking, 'tracking table')
-    df_data = mergeTracking(df_tracking, df_data, df_data_old)
-    
-    # Create filepath_tags_tmp
-    tags_tmp = ['ImageComments', 'NominalPercentageOfCardiacPhase', 'CardiacRRIntervalSpecified', 'SeriesInstanceUID', 'ConvolutionKernel', 'PatientID']
-    df_tags = pd.read_excel(filepath_tags)
-    df_tags_tmp = df_tags[tags_tmp]
-    df_tags_tmp.to_excel(filepath_tags_tmp)
-    
-    
-    # Merge cta
-    path_name_list = [
-                    (filepath_tags_tmp, 'discharge'),
-                    (filepath_master_old, 'master_huhu'),
-                    (filepath_ITT,'itt'),
-                    (filepath_phase_exclude_stenosis,'phase_exclude_stenosis'),
-                    (filepath_stenosis_bigger_20_phases,'stenosis_bigger_20_phases'),
-                    (filepath_prct,'prct'),
-                    (filepath_eCRF,'ecrf')
-                    ]
-    DATABASE = 'tests'
-    SQL_SCRIPTS = ['ecrf_queries.sql', 'connect_dicom.sql'] 
-    MYSQL_ENGINE = 'mysql://root:password@localhost/?charset=utf8'
-    EXCEL_OUT = 'master_new.xlsx'
-    update_table(path_name_list, DATABASE, SQL_SCRIPTS, MYSQL_ENGINE, EXCEL_OUT)
-    
-    # Sort table
-    df_data = df_data.sort_values(["PatientID", "SeriesInstanceUID"], ascending = (True, True))
-    df_data.reset_index(inplace = True, drop=True)
-
-    # Copy template and replabe DATA sheet
-    copyfile(filepath_template, filepath_master)
-    
-    # Write data
-    writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
-    
-    # Save workbook
-    workbook  = writer.book
-    sheet = workbook['DATA']
-    workbook.remove(sheet)
-    
-    #df_data.loc[0,'Count'] = 333
-    df_data.to_excel(writer, sheet_name="DATA")
-
-    sheet = workbook['DATA']
-    # Write CACS_10StepsGuide
-    #sheet = update_CACS_10StepsGuide(df_CACS, sheet)
-    # Highlight_columns
-    sheet = highlight_columns(df_master, sheet)
-    
-    writer.save()
 
 #########################################################################
 def freeze(writer, sheetname, df):
@@ -661,129 +369,54 @@ def setLock(sheet, column='BF'):
 
     return sheet  
 
-def createTables(folderpath_discharge, folderpath_master, folderpath_tables):
-    
-    date = folderpath_master.split('_')[-1]
-    # Create folderpath_master
-    if not os.path.isdir(folderpath_master):
-        os.mkdir(folderpath_master)
-    folderpath_sources = os.path.join(folderpath_master, 'discharge_sources_' + date)
-   
-    # Create folderpath_sources
-    if not os.path.isdir(folderpath_sources):
-        os.mkdir(folderpath_sources)
-    # Copy dicom table
-    filepath_dicom_table = os.path.join(folderpath_tables, 'discharge_dicom.xlsx')
-    filepath_dicom = os.path.join(folderpath_sources, 'discharge_dicom_' + date +'.xlsx')
-    copyfile(filepath_dicom_table, filepath_dicom)
-    
-    # Copy ITT table
-    filepath_ITT_table = os.path.join(folderpath_tables, 'discharge_ITT.xlsx')
-    filepath_ITT = os.path.join(folderpath_sources, 'discharge_ITT_' + date + '.xlsx')
-    copyfile(filepath_ITT_table, filepath_ITT)
-    
-    # Copy ecrf table
-    filepath_ecrf_table = os.path.join(folderpath_tables, 'discharge_ecrf.xlsx')
-    filepath_ecrf = os.path.join(folderpath_sources, 'discharge_ecrf_' + date + '.xlsx')
-    copyfile(filepath_ecrf_table, filepath_ecrf)
+def checkTables(settings):
 
-    # Copy prct table
-    filepath_prct_table = os.path.join(folderpath_tables, 'discharge_prct.xlsx')
-    filepath_prct = os.path.join(folderpath_sources, 'discharge_prct_' + date + '.xlsx')
-    copyfile(filepath_prct_table, filepath_prct)
+    # Check if requird tables exist
+    tables=['filepath_dicom', 'filepath_ITT', 'filepath_ecrf', 'filepath_prct',
+            'filepath_phase_exclude_stenosis', 'filepath_stenosis_bigger_20_phases', 'filepath_tracking']
+    for table in tables:
+        if not os.path.isfile(settings[table]):
+            raise ValueError("Source file " + settings[table] + ' does not exist. Please copy file in the correct directory!')
+    return True
 
-    # Copy phase_exclude_stenosis table
-    filepath_phase_exclude_stenosis_table = os.path.join(folderpath_tables, 'discharge_phase_exclude_stenosis.xlsx')
-    filepath_phase_exclude_stenosis = os.path.join(folderpath_sources, 'discharge_phase_exclude_stenosis_' + date + '.xlsx')
-    copyfile(filepath_phase_exclude_stenosis_table, filepath_phase_exclude_stenosis)
-
-    # Copy phase_exclude_stenosis table
-    filepath_stenosis_bigger_20_phases_table = os.path.join(folderpath_tables, 'discharge_stenosis_bigger_20_phases.xlsx')
-    filepath_stenosis_bigger_20_phases = os.path.join(folderpath_sources, 'discharge_stenosis_bigger_20_phases_' + date + '.xlsx')
-    copyfile(filepath_stenosis_bigger_20_phases_table, filepath_stenosis_bigger_20_phases)
-
-    # Copy tracking table
-    filepath_tracking_table = os.path.join(folderpath_tables, 'discharge_tracking.xlsx')
-    filepath_tracking = os.path.join(folderpath_sources, 'discharge_tracking_' + date + '.xlsx')
-    copyfile(filepath_tracking_table, filepath_tracking)
-
-def createData(folderpath_master, NumSamples=None):
-    
-    # Create filepath
-    date = folderpath_master.split('_')[-1]
-    print('Create data for discharge_master_' + date)
-    folderpath_sources = os.path.join(folderpath_master, 'discharge_sources_' + date)
-    folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    if not os.path.isdir(folderpath_components):
-        os.mkdir(folderpath_components)
+def createData(settings, NumSamples=None):
         
-    # Create filepaths
-    filepath_ecrf = glob(folderpath_sources + '/*_ecrf_*.xlsx')[0]
-    filepath_ITT = glob(folderpath_sources + '/*ITT*.xlsx')[0]
-    filepath_phase_exclude_stenosis = glob(folderpath_sources + '/*phase_exclude_stenosis*.xlsx')[0]
-    filepath_prct = glob(folderpath_sources + '/*prct*.xlsx')[0]
-    filepath_stenosis_bigger_20_phases = glob(folderpath_sources + '/*stenosis_bigger_20_phases*.xlsx')[0]
-    filepath_dicom = glob(folderpath_sources + '/*dicom*.xlsx')[0]
-    filepath_data = os.path.join(folderpath_components, 'discharge_data_' + date + '.xlsx')
+    dicom_tag_order = settings['dicom_tag_order']
+    columns_first = settings['columns_first']
 
     # Extract dicom data
-    df_dicom = pd.read_excel(filepath_dicom, index_col=0)
-    
-    # Reorder datafame
-    dicom_cols = ['Site','PatientID','StudyInstanceUID','SeriesInstanceUID','AcquisitionDate','SeriesNumber', 'Count', 'NumberOfFrames', 'SeriesDescription',
-     'Modality','Rows', 'InstanceNumber','ProtocolName','ContrastBolusAgent','ImageComments','PixelSpacing','SliceThickness','ConvolutionKernel',
-     'ReconstructionDiameter','RequestedProcedureDescription','ContrastBolusStartTime','NominalPercentageOfCardiacPhase','CardiacRRIntervalSpecified',
-     'StudyDate']
-    
-    # NumStudy=[]
-    # PatientID=df_dicom['PatientID'].unique()
-    # for patient in PatientID:
-    #     if not patient == '08-BUD-0423':
-    #         df_pat = df_dicom[df_dicom['PatientID']==patient]
-    #         df_study = df_pat['StudyInstanceUID'].unique()
-    #         NumStudy.append(df_study.shape[0])
-
-    
-    df_dicom = df_dicom[dicom_cols]
+    df_dicom = pd.read_excel(settings['filepath_dicom'], index_col=0)
+    df_dicom = df_dicom[dicom_tag_order]
     df_dicom = df_dicom[(df_dicom['Modality']=='CT') | (df_dicom['Modality']=='OT')]
     df_dicom = df_dicom.reset_index(drop=True)
-
     cols = df_dicom.columns.tolist()
-    cols_new = cols_first + [x for x in cols if x not in cols_first]
+    cols_new = columns_first + [x for x in cols if x not in columns_first]
     df_dicom = df_dicom[cols_new]
     df_data = df_dicom.copy()
     df_data = df_data.reset_index(drop=True)
-    
+    # Select subset
     if NumSamples is not None:
         df_data = df_data[NumSamples[0]:NumSamples[1]]
-
     # Extract ecrf data
-    df_ecrf = pd.read_excel(filepath_ecrf)
+    df_ecrf = pd.read_excel(settings['filepath_ecrf'])
     df_data = mergeEcrf(df_ecrf, df_data)
-    
     # Extract ITT 
-    df_ITT = pd.read_excel(filepath_ITT, 'Tabelle1')
+    df_ITT = pd.read_excel(settings['filepath_ITT'], 'Tabelle1')
     df_data = mergeITT(df_ITT, df_data)
-    
     # Extract phase_exclude_stenosis 
-    df_phase_exclude_stenosis = pd.read_excel(filepath_phase_exclude_stenosis)
+    df_phase_exclude_stenosis = pd.read_excel(settings['filepath_phase_exclude_stenosis'])
     df_data = mergePhase_exclude_stenosis(df_phase_exclude_stenosis, df_data)
-    
     # Extract prct
-    df_prct = pd.read_excel(filepath_prct)
+    df_prct = pd.read_excel(settings['filepath_prct'])
     df_data = mergePrct(df_prct, df_data)
-    
     # Extract stenosis_bigger_20_phases
-    df_stenosis_bigger_20_phases = pd.read_excel(filepath_stenosis_bigger_20_phases)
+    df_stenosis_bigger_20_phases = pd.read_excel(settings['filepath_stenosis_bigger_20_phases'])
     df_data = mergeStenosis_bigger_20_phase(df_stenosis_bigger_20_phases, df_data)  
-    
     # Reoder columns
     cols = df_data.columns.tolist()
-    cols_new = cols_first + [x for x in cols if x not in cols_first]
-    
-    filepath_master_data = os.path.join(folderpath_components, 'discharge_master_data_' + date + '.xlsx')
-    df_data.to_excel(filepath_data)
-    copyfile(filepath_data, filepath_master_data)
+    cols_new = columns_first + [x for x in cols if x not in columns_first]
+    df_data.to_excel(settings['filepath_data'])
+
 
 def updateData(folderpath_master, folderpath_master_before):
     
@@ -948,38 +581,28 @@ def updatePredictions(folderpath_master):
     dataname='discharge_master_data_'
     createPredictions(folderpath_master, dataname)
     
-def createPredictions(folderpath_master, dataname='discharge_data_'):
-    date = folderpath_master.split('_')[-1]
-    folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    if not os.path.isdir(folderpath_components):
-        os.mkdir(folderpath_components)
-    filepath_data = os.path.join(folderpath_components, dataname + date + '.xlsx')
-    filepath_pred = os.path.join(folderpath_components, 'discharge_pred_' + date + '.xlsx')
-    
-    df_data = pd.read_excel(filepath_data)
-    
-    # Repace Count for multi-slice format
-    #idx=df_data['NumberOfFrames']>0
-    #df_data['Count'][idx] = df_data['NumberOfFrames'][idx]
-    
+
+def createPredictions(settings):
+
+    df_data = pd.read_excel(settings['filepath_data'])
     df_pred = pd.DataFrame()
     
     # Filter by CACS based on 10-Steps-Guide
     df = filter_CACS_10StepsGuide(df_data)
     df_pred['CACS10StepsGuide'] = df['CACS10StepsGuide']
     
-    # Filter by CACS based extended selection
-    df = filter_CACS_Extended(df_data)
-    df_pred['CACSExtended'] = df['CACSExtended']
+    # Filter by CACS based  selection
+    df = filter_CACS(df_data)
+    df_pred['CACS'] = df['CACS']
     
-    # Filter by NCS_CACS and NCS_CTA based on extended criteria
-    df = filter_NCS_Extended(df_data)
-    df_pred['NCS_CTAExtended'] = df['NCS_CTAExtended']
-    df_pred['NCS_CACSExtended'] = df['NCS_CACSExtended']
+    # Filter by NCS_CACS and NCS_CTA based on  criteria
+    df = filter_NCS(df_data)
+    df_pred['NCS_CTA'] = df['NCS_CTA']
+    df_pred['NCS_CACS'] = df['NCS_CACS']
     
     # Filter by CTA
-    df = filter_CTA_Extended(folderpath_master)
-    df_pred['CTAExtended'] = df['CTAExtended'].astype('bool')
+    df = filter_CTA(settings)
+    df_pred['CTA'] = df['CTA'].astype('bool')
     df_pred['CTA_phase'] = df['phase']
     df_pred['CTA_arteries'] = df['arteries']
     df_pred['CTA_source'] = df['source']
@@ -992,8 +615,11 @@ def createPredictions(folderpath_master, dataname='discharge_data_'):
     df = filterReconstruction(df_data)
     df_pred['RECO'] = df['RECO']
     
-    # Predict CLASSExtended
-    classes = ['CACSExtended', 'CTAExtended', 'NCS_CTAExtended', 'NCS_CACSExtended']
+    # Filter by reconstruction
+    #df_pred['RFRECO'] = ''
+    
+    # Predict CLASS
+    classes = ['CACS', 'CTA', 'NCS_CTA', 'NCS_CACS']
     for i in range(len(df_pred)):
         if i % 1000 == 0:
             print('index:', i, '/', len(df_pred))
@@ -1006,10 +632,10 @@ def createPredictions(folderpath_master, dataname='discharge_data_'):
                     value = value + '+' + c
         if value == '':
             value = 'UNDEFINED'
-        df_pred.loc[i, 'CLASSExtended'] = value
-
+        df_pred.loc[i, 'CLASS'] = value
+        
     # Save predictions    
-    df_pred.to_excel(filepath_pred)
+    df_pred.to_excel(settings['filepath_prediction'])
 
 def updateRFClassification(folderpath_master, folderpath_master_before):
 
@@ -1030,190 +656,10 @@ def updateRFClassification(folderpath_master, folderpath_master_before):
 
     df_rfc.to_excel(filepath_rfc)
 
-def createRFClassification(folderpath_master):
-    print('Create columns for RF Classification')
-    date = folderpath_master.split('_')[-1]
-    folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    if not os.path.isdir(folderpath_components):
-        os.mkdir(folderpath_components)
-
-    filepath_data = os.path.join(folderpath_components, 'discharge_data_' + date + '.xlsx')
-    filepath_rfc = os.path.join(folderpath_components, 'discharge_rfc_' + date + '.xlsx')
-    df_data = pd.read_excel(filepath_data)
-    # Repace Count for multi-slice format
-    #idx=df_data['NumberOfFrames']>0
-    #df_data['Count'][idx] = df_data['NumberOfFrames'][idx]
-    
-    df_rfc0 = pd.DataFrame('UNDEFINED', index=np.arange(len(df_data)), columns=['RFCLabel'])
-    df_rfc1 = pd.DataFrame('UNDEFINED', index=np.arange(len(df_data)), columns=['RFCClass'])
-    df_rfc2 = pd.DataFrame(0, index=np.arange(len(df_data)), columns=['RFCConfidence'])
-    df_rfc = pd.concat([df_rfc0, df_rfc1, df_rfc2], axis=1)
-    df_rfc.to_excel(filepath_rfc)
-
-def initRFClassification(folderpath_master, master_process=False):
-    
-    date = folderpath_master.split('_')[-1]
-    folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    if not os.path.isdir(folderpath_components):
-        os.mkdir(folderpath_components)
-        
-    if master_process:
-        filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '_process' + '.xlsx')
-    else:
-        filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    print('Classifie columns for RF Classification from', filepath_master)
-    #filepath_master = os.path.join(folderpath_components, 'discharge_master_' + date + '.xlsx')
-    # Read dataframe
-    #df_rfc = pd.read_excel(filepath_rfc, index_col=0)
-    sheet_name = 'MASTER_' + date
-    if os.path.exists(filepath_master):
-        df_master = pd.read_excel(filepath_master, sheet_name=sheet_name, index_col=0)
-        
-        # Create active learner
-        learner = ActiveLearner()
-        target = featureSelection(filtername='CACSFilter_V02')
-        discharge_filter = target['FILTER']
-        
-        # Extract features
-        #learner.extractFeatures(df_master, discharge_filter)
-        
-        filepath_hist = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_01042020/discharge_master_01042020_hist.pkl'
-        dfHist = pd.read_pickle(filepath_hist)
-        dfData = pd.concat([dfHist.iloc[:,3:], dfHist.iloc[:,1]],axis=1)
-        X = np.array(dfData)
-        scanClassesRF = defaultdict(lambda:-1,{'CACSExtended': 0, 'CTAExtended': 1, 'NCS_CACSExtended': 2, 'NCS_CTAExtended': 3, 'OTHER': 4})
-        #scanClassesRFInv = defaultdict(lambda:'',{'CACSExtended': 1, 'CTAExtended': 2, 'NCS_CACSExtended': 3, 'NCS_CTAExtended': 4})
-        scanClassesRFInv = defaultdict(lambda:'UNDEFINED' ,{0: 'CACSExtended', 1: 'CTAExtended', 2: 'NCS_CACSExtended', 3: 'NCS_CTAExtended', 4: 'OTHER'})
-        
-        #Y = [scanClassesRF[x] for x in list(dfHist['CLASSExtended'])]
-        Y = [scanClassesRF[x] for x in list(df_master['CLASSExtended'])]
-        Y = np.array(Y)
-        X = np.where(X=='', -1, X)
-        
-        Target = 'RFCLabel'
-        df_class = df_master.copy()
-        Y = Y[0:len(df_class[Target])]
-        X = X[0:len(df_class[Target])]
-
-        learner.df_features = X
-
-        # Update data
-        if sum(Y>0)>0:
-            #Yarray = np.array(Y)
-            #Yarray[Yarray==0] = -1
-            
-            df_class[Target] = Y
-            
-            # Predict random forest
-            confidence, C, ACC, pred_class, df_features = learner.confidencePredictor(df_class, discharge_filter, Target = Target)
-            print('Confusion matrix:', C)
-            pred_class = [scanClassesRFInv[x] for x in list(pred_class)]
-            df_master['RFCConfidence'] = confidence
-            df_master['RFCClass'] = pred_class
-            df_master['RFCLabel'] = [scanClassesRFInv[x] for x in list(Y)]
-            
-            # Write results to master
-            writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
-            workbook  = writer.book
-            sheet = workbook[sheet_name]
-            workbook.remove(sheet)
-            df_master.to_excel(writer, sheet_name=sheet_name)
-            writer.save()
-        else:
-            print('data are not labled')
-    else:
-        print('Master', filepath_master, 'not found')
-        
-def classifieRFClassification(folderpath_master, master_process = False):
-    
-    date = folderpath_master.split('_')[-1]
-    folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    if not os.path.isdir(folderpath_components):
-        os.mkdir(folderpath_components)
-    #filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '_process' + '.xlsx')
-    if master_process==False:
-        filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    else:
-        filepath_master_tmp = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-        folderpath, filename, file_extension = splitFilePath(filepath_master_tmp)
-        filepath_master = os.path.join(folderpath, filename + '_process' + file_extension)
-        
-    print('Classifie columns for RF Classification from', filepath_master)
-    #filepath_master = os.path.join(folderpath_components, 'discharge_master_' + date + '.xlsx')
-    # Read dataframe
-    #df_rfc = pd.read_excel(filepath_rfc, index_col=0)
-    sheet_name = 'MASTER_' + date
-    if os.path.exists(filepath_master):
-        df_master = pd.read_excel(filepath_master, sheet_name=sheet_name, index_col=0)
-        
-        # Create active learner
-        learner = ActiveLearner()
-        target = featureSelection(filtername='CACSFilter_V02')
-        discharge_filter = target['FILTER']
-
-        filepath_hist = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_01042020/discharge_master_01042020_hist.pkl'
-        dfHist = pd.read_pickle(filepath_hist)
-        
-        df0 = df_master[['SeriesInstanceUID','RFCLabel']]
-        df_merge = df0.merge(dfHist, on=['SeriesInstanceUID', 'SeriesInstanceUID'])
-        
-        #dfHist = dfHist[idx_ct]
-        #dfData = pd.concat([dfHist.iloc[:,3:], dfHist.iloc[:,1]],axis=1)
-        #dfData = pd.concat([df_merge.iloc[:,4:104], df_merge.iloc[:,2]],axis=1)
-        dfData = pd.concat([df_merge.iloc[:,4:104]],axis=1)
-        X = np.array(dfData)
-        scanClassesRF = defaultdict(lambda:-1,{'CACSExtended': 0, 'CTAExtended': 1, 'NCS_CACSExtended': 2, 'NCS_CTAExtended': 3, 'OTHER': 4})
-        #scanClassesRFInv = defaultdict(lambda:'',{'CACSExtended': 1, 'CTAExtended': 2, 'NCS_CACSExtended': 3, 'NCS_CTAExtended': 4})
-        scanClassesRFInv = defaultdict(lambda:'UNDEFINED' ,{0: 'CACSExtended', 1: 'CTAExtended', 2: 'NCS_CACSExtended', 3: 'NCS_CTAExtended', 4: 'OTHER'})
 
 
-        Y = [scanClassesRF[x] for x in list(df_merge['RFCLabel'])]
-        Y = np.array(Y)
-        X = np.where(X=='', -1, X)
         
-        Target = 'RFCLabel'
-        #df_class = df_master.copy()
-        #Y = Y[0:len(result[Target])]
-        #X = X[0:len(result[Target])]
-        
-        
-        #Xsel=X[Y>-1]
-        #Ysel=Y[Y>-1]
-    
-        learner.df_features = X
-        
-        #Target = 'RFCLabel'
-        
-        # Update data
-        #Y = df_master[Target].copy()
-        #Y = [scanClassesRF[x] for x in list(Y)]
-        
-        if sum(Y>0)>0:
-            #Yarray = np.array(Y)
-            #Yarray[Yarray==0] = -1
-            #df_class = df_master.copy()
-            #df_class[Target] = Y
-            df_merge[Target] = Y
-            
-            # Predict random forest
-            confidence, C, ACC, pred_class, df_features = learner.confidencePredictor(df_merge, discharge_filter, Target = Target)
-            print('Confusion matrix:', C)
-            pred_class = [scanClassesRFInv[x] for x in list(pred_class)]
-            df_master['RFCConfidence'] = confidence
-            df_master['RFCClass'] = pred_class
-            
-            # Write results to master
-            writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
-            workbook  = writer.book
-            sheet = workbook[sheet_name]
-            workbook.remove(sheet)
-            df_master.to_excel(writer, sheet_name=sheet_name)
-            writer.save()
-        else:
-            print('data are not labled')
-    else:
-        print('Master', filepath_master, 'not found')
-        
+
 def updateManualSelection(folderpath_master, folderpath_master_before):
     print('Update manual selection')
     
@@ -1233,23 +679,14 @@ def updateManualSelection(folderpath_master, folderpath_master_before):
     df_manual.to_excel(filepath_manual)
 
     
-def createManualSelection(folderpath_master):
+def createManualSelection(settings):
     print('Create manual selection')
-    date = folderpath_master.split('_')[-1]
-    folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    if not os.path.isdir(folderpath_components):
-        os.mkdir(folderpath_components)
-    folderpath_sources = os.path.join(folderpath_master, 'discharge_sources_' + date)
-
-    filepath_data = os.path.join(folderpath_components, 'discharge_data_' + date + '.xlsx')
-    filepath_manual = os.path.join(folderpath_components, 'discharge_manual_' + date + '.xlsx')
-    
-    df_data = pd.read_excel(filepath_data, index_col=0)
+    df_data = pd.read_excel(settings['filepath_data'], index_col=0)
     df_manual0 = pd.DataFrame('UNDEFINED', index=np.arange(len(df_data)), columns=['ClassManualCorrection'])
     df_manual1 = pd.DataFrame('', index=np.arange(len(df_data)), columns=['Comment'])
     df_manual2 = pd.DataFrame('', index=np.arange(len(df_data)), columns=['Responsible Person'])
     df_manual = pd.concat([df_manual0, df_manual1, df_manual2], axis=1)
-    df_manual.to_excel(filepath_manual)
+    df_manual.to_excel(settings['filepath_manual'])
 
     
 def updateTracking(folderpath_master, folderpath_master_before):
@@ -1315,48 +752,14 @@ def createTracking(folderpath_master, create_master_track=True):
     if create_master_track:
         copyfile(filepath_track, filepath_master_track)
 
-def createTrackingTable(folderpath_master, create_master_track=True, master_process=False):
+def createTrackingTable(settings):
     print('Create tracking table')
-    
-    date = folderpath_master.split('_')[-1]
-    folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    columns = ['ProblemID', 'Site', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'Problem Summary',
-               'Problem', 'Date of Query', 'Date of the change/sending', 'Results', 'Answer from the site', 'Status', 'Responsible Person']
-
-
-    df_track = pd.DataFrame(columns=columns)
-    #folderpath_sources = os.path.join(folderpath_master, 'discharge_sources_' + date)
-    #filepath_track = os.path.join(folderpath_components, 'discharge_track_' + date + '.xlsx')
-    #filepath_tracking = glob(folderpath_sources + '/*tracking*.xlsx')[0]
-    #filepath_master_track = os.path.join(folderpath_components, 'discharge_master_track_' + date + '.xlsx')
-    #filepath_master_data = os.path.join(folderpath_components, 'discharge_master_data_' + date + '.xlsx')
-    #filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    if master_process==False:
-        filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    else:
-        filepath_master_tmp = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-        folderpath, filename, file_extension = splitFilePath(filepath_master_tmp)
-        filepath_master = os.path.join(folderpath, filename + '_process' + file_extension)
-    
-    # Read tracking table
-    # = pd.read_excel(filepath_tracking, 'tracking table')
-    #df_tracking.replace(to_replace=[np.nan], value='', inplace=True)
-    #df_data = pd.read_excel(filepath_master_data, index_col=0)
-    #df_master = pd.read_excel(filepath_master, index_col=0)
-    
-    #df_data = df_data.copy()
-    #df_tracking = df_tracking.copy()
-    #df_data.replace(to_replace=[np.nan], value='', inplace=True)
-    #df_tracking.replace(to_replace=[np.nan], value='', inplace=True)
-
-    # df_track.to_excel(filepath_track)
-    # if create_master_track:
-    #     copyfile(filepath_track, filepath_master_track)
-
+    df_track = pd.DataFrame(columns=settings['columns_tracking'])
+    df_track.to_excel(settings['filepath_master_track'])
     # Update master
-    writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
+    writer = pd.ExcelWriter(settings['filepath_master'], engine="openpyxl", mode="a")
     # Remove sheet if already exist
-    sheet_name = 'TRACKING' + '_' + date
+    sheet_name = 'TRACKING' + '_' + settings['date']
     workbook  = writer.book
     sheetnames = workbook.sheetnames
     if sheet_name in sheetnames:
@@ -1428,29 +831,12 @@ def updateTrackingTableFromMaster(folderpath_master, master_process=False):
     writer.save()
     
     
-def updateMasterFromTrackingTable(folderpath_master, master_process=False):
+def updateMasterFromTrackingTable(settings):
     print('Create tracking table')
-
-    date = folderpath_master.split('_')[-1]
-    folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-
-    folderpath_sources = os.path.join(folderpath_master, 'discharge_sources_' + date)
-    folderpath_tracking = os.path.join(folderpath_master, 'discharge_tracking')
-    filepath_tracking = glob(folderpath_tracking + '/*tracking*.xlsx')[0]
-    filepath_master_track = os.path.join(folderpath_components, 'discharge_master_track_' + date + '.xlsx')
-    filepath_master_data = os.path.join(folderpath_components, 'discharge_master_data_' + date + '.xlsx')
-    #filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    if master_process==False:
-        filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    else:
-        filepath_master_tmp = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-        folderpath, filename, file_extension = splitFilePath(filepath_master_tmp)
-        filepath_master = os.path.join(folderpath, filename + '_process' + file_extension)
-    
     # Read tracking table
-    df_tracking = pd.read_excel(filepath_tracking, 'tracking table')
+    df_tracking = pd.read_excel(settings['filepath_tracking'], 'tracking table')
     df_tracking.replace(to_replace=[np.nan], value='', inplace=True)
-    df_track = pd.read_excel(filepath_master, 'TRACKING_' + date, index_col=0)
+    df_track = pd.read_excel(settings['filepath_master'], 'TRACKING_' + settings['date'], index_col=0)
     
     columns_track = df_track.columns
     columns_tracking = df_tracking.columns
@@ -1485,7 +871,7 @@ def updateMasterFromTrackingTable(folderpath_master, master_process=False):
     # Update master
     writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
     # Remove sheet if already exist
-    sheet_name = 'TRACKING' + '_' + date
+    sheet_name = 'TRACKING' + '_' + settings['date']
     workbook  = writer.book
     sheetnames = workbook.sheetnames
     if sheet_name in sheetnames:
@@ -1497,7 +883,7 @@ def updateMasterFromTrackingTable(folderpath_master, master_process=False):
     writer.save()
     
     # Update tracking
-    writer = pd.ExcelWriter(filepath_tracking, engine="openpyxl", mode="a")
+    writer = pd.ExcelWriter(settings['filepath_tracking'], engine="openpyxl", mode="a")
     # Remove sheet if already exist
     sheet_name = 'tracking table'
     workbook  = writer.book
@@ -1510,105 +896,51 @@ def updateMasterFromTrackingTable(folderpath_master, master_process=False):
     df_tracking.to_excel(writer, sheet_name=sheet_name, index=False)
     writer.save()
 
-def orderMasterData(df_master):
+def orderMasterData(df_master, settings):
 
     # Reoder columns
-    cols_first=['Site', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'CLASSExtended', 'RFCClass', 'RFCLabel', 'RFCConfidence',
-                'ClassManualCorrection', 'Comment', 'Responsible Person', 'Count', 'SeriesDescription', 'SeriesNumber', 'AcquisitionDate']
+    # cols_first=['Site', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'CLASSExtended', 'RFCClass', 'RFCLabel', 'RFCConfidence',
+    #             'ClassManualCorrection', 'Comment', 'Responsible Person', 'Count', 'SeriesDescription', 'SeriesNumber', 'AcquisitionDate']
     
     cols = df_master.columns.tolist()
-    cols_new = cols_first + [x for x in cols if x not in cols_first]
+    cols_new = settings['columns_first'] + [x for x in cols if x not in settings['columns_first']]
     df_master = df_master[cols_new]
     df_master = df_master.sort_values(['PatientID', 'StudyInstanceUID', 'SeriesInstanceUID'], ascending = (True, True, True))
     df_master.reset_index(inplace=True, drop=True)
     return df_master
     
-def mergeMaster(folderpath_master, folderpath_master_before):
+def mergeMaster(settings):
     print('Create master')
-    
-    folderpath_master_before_list = glob(folderpath_master_before + '/*master*')
-    folderpath_master_before_list = sortFolderpath(folderpath_master, folderpath_master_before_list)
-    
-    # Filer folderpath_master_before_list by process file existance
-    folderpath_master_before_list_tmp = folderpath_master_before_list
-    folderpath_master_before_list=[]
-    for folder in folderpath_master_before_list_tmp:
-        if len(glob(folder + '/*process*.xlsx'))>0:
-            folderpath_master_before_list.append(folder)
-
-    date = folderpath_master.split('_')[-1]
-    folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    if not os.path.isdir(folderpath_components):
-        os.mkdir(folderpath_components)
-    folderpath_sources = os.path.join(folderpath_master, 'discharge_sources_' + date)
-    filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    filepath_data = os.path.join(folderpath_components, 'discharge_data_' + date + '.xlsx')
-    filepath_master_data = os.path.join(folderpath_components, 'discharge_master_data_' + date + '.xlsx')
-    filepath_pred = os.path.join(folderpath_components, 'discharge_pred_' + date + '.xlsx')
-    filepath_rfc = os.path.join(folderpath_components, 'discharge_rfc_' + date + '.xlsx')
-    filepath_manual = os.path.join(folderpath_components, 'discharge_manual_' + date + '.xlsx')
-    filepath_track = os.path.join(folderpath_components, 'discharge_track_' + date + '.xlsx')
-    filepath_master_track = os.path.join(folderpath_components, 'discharge_master_track_' + date + '.xlsx')
-    filepath_change = os.path.join(folderpath_components, 'discharge_change_' + date + '.xlsx')
-    filepath_patient = os.path.join(folderpath_components, 'discharge_patient_' + date + '.xlsx')
-    
     # Read tables
     print('Read discharge_master_data')
-    df_master_data = pd.read_excel(filepath_master_data, index_col=0)
+    #df_master_data = pd.read_excel(filepath_master_data, index_col=0)
     print('Read discharge_data')
-    df_data = pd.read_excel(filepath_data, index_col=0)
+    df_data = pd.read_excel(settings['filepath_data'], index_col=0)
     print('Read discharge_pred')
-    df_pred = pd.read_excel(filepath_pred, index_col=0)
-    df_pred['CTAExtended'] = df_pred['CTAExtended'].astype('bool')
+    df_pred = pd.read_excel(settings['filepath_prediction'], index_col=0)
+    df_pred['CTA'] = df_pred['CTA'].astype('bool')
+    print('Read discharge_reco')
+    #df_reco_load = pd.read_excel(filepath_reco, index_col=0)
+    df_reco = pd.DataFrame()
+    #df_reco['RFRECO'] = df_reco_load['RFRECO']
+    df_reco['RFRECO'] = ''
+    print('Read discharge_guide')
+    #df_guide = pd.read_excel(filepath_guide, index_col=0)
     #print('Read discharge_patient')
     #df_patient = pd.read_excel(filepath_patient, index_col=0)
     print('Read discharge_rfc')
-    df_rfc = pd.read_excel(filepath_rfc, index_col=0)
+    df_rfc = pd.read_excel(settings['filepath_rfc'], index_col=0)
     print('Read discharge_manual')
-    df_manual = pd.read_excel(filepath_manual, index_col=0)
+    df_manual = pd.read_excel(settings['filepath_manual'], index_col=0)
     print('Read discharge_track')
-    #df_master_track = pd.read_excel(filepath_master_track, index_col=0)
-    if len(folderpath_master_before_list)>1:
-        print('Read discharge_change')
-        df_change = pd.read_excel(filepath_change, index_col=0)
     print('Create discharge_master')
-    #df_master = pd.concat([df_master_data, df_pred, df_rfc, df_manual, df_master_track], axis=1)
-    df_master = pd.concat([df_master_data, df_pred, df_rfc, df_manual], axis=1)
-    df_master = orderMasterData(df_master)
-    
-    #df_master.to_excel(filepath_master)
+    df_master = pd.concat([df_master_data, df_pred, df_rfc, df_manual, df_reco], axis=1)
+    df_master = orderMasterData(df_master, settings)
 
-    if len(folderpath_master_before_list)>0:
-        filepathMasters = [glob(folder + '/*master*.xlsx')[0] for folder in folderpath_master_before_list]
-        filepathMasters = filepathMasters + glob(folderpath_master_before_list[-1] + '/*process*.xlsx')
-    else:
-        filepathMasters = []
-
-    writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="w")
-    
-    for file in filepathMasters:
-        if 'process' in file:
-            date_before = file[0:-5].split('_')[-2]
-            df = pd.read_excel(file, index_col=0)
-            df.to_excel(writer, sheet_name = 'DATA' + '_' + date_before + '_process')
-        else:
-            date_before = file[0:-5].split('_')[-1]
-            df = pd.read_excel(file, index_col=0)
-            df.to_excel(writer, sheet_name = 'DATA' + '_' + date_before)
-
-    # #df_master.to_excel(writer, sheet_name = 'DATA' + '_' + date)
-    df_data.to_excel(writer, sheet_name = 'DATA' + '_' + date)
-    if len(folderpath_master_before_list)>1:
-        df_change.to_excel(writer, sheet_name = 'DATA_CHANGES' + '_' + date)
-        
-    #df_master.set_index(['PatientID','StudyInstanceUID','SeriesInstanceUID'])
-    df_master = orderMasterData(df_master)
-    df_master.to_excel(writer, sheet_name = 'MASTER' + '_' + date)
+    writer = pd.ExcelWriter(settings['filepath_master'], engine="openpyxl", mode="w")
+    df_master.to_excel(writer, sheet_name = 'MASTER' + '_' + settings['date'])
     # Add patient data
-    #df_patient.to_excel(writer, sheet_name = 'PATIENT_STATUS' + '_' + date)
     writer.save()
-    
-    #return df_master 
 
 def creatMaster(folderpath_master):
     print('Create master')
@@ -1650,39 +982,21 @@ def createMasterProcess(folderpath_master):
     copyfile(filepath_master, filepath_process)
 
 
-def formatMaster(folderpath_master, master_process = False, format='ALL'):
+def formatMaster(settings, format='ALL'):
     print('Format master')
-    date = folderpath_master.split('_')[-1]
-    folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    if not os.path.isdir(folderpath_components):
-        os.mkdir(folderpath_components)
-    folderpath_sources = os.path.join(folderpath_master, 'discharge_sources_' + date)
-    if master_process==False:
-        filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    else:
-        filepath_master_tmp = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-        folderpath, filename, file_extension = splitFilePath(filepath_master_tmp)
-        filepath_master = os.path.join(folderpath, filename + '_process' + file_extension)
-    filepath_master_data = os.path.join(folderpath_components, 'discharge_master_data_' + date + '.xlsx')
-    filepath_pred = os.path.join(folderpath_components, 'discharge_pred_' + date + '.xlsx')
-    filepath_rfc = os.path.join(folderpath_components, 'discharge_rfc_' + date + '.xlsx')
-    filepath_manual = os.path.join(folderpath_components, 'discharge_manual_' + date + '.xlsx')
-    filepath_master_track = os.path.join(folderpath_components, 'discharge_master_track_' + date + '.xlsx')
-    filepath_patient = os.path.join(folderpath_components, 'discharge_patient_' + date + '.xlsx')
-    
     # Read tables
     print('Read discharge_data')
-    df_data = pd.read_excel(filepath_master_data, index_col=0)
+    df_data = pd.read_excel(settings['filepath_data'], index_col=0)
     print('Read discharge_pred')
-    df_pred = pd.read_excel(filepath_pred, index_col=0)
+    df_pred = pd.read_excel(settings['filepath_prediction'], index_col=0)
     print('Read discharge_rfc')
-    df_rfc = pd.read_excel(filepath_rfc, index_col=0)
+    df_rfc = pd.read_excel(settings['filepath_rfc'], index_col=0)
     print('Read discharge_manual')
-    df_manual = pd.read_excel(filepath_manual, index_col=0)
+    df_manual = pd.read_excel(settings['filepath_manual'], index_col=0)
     print('Read discharge_track')
-    df_track = pd.read_excel(filepath_master_track, index_col=0)
+    df_track = pd.read_excel(settings['filepath_track'], index_col=0)
     print('Read patient_data')
-    df_patient = pd.read_excel(filepath_patient, index_col=0)
+    df_patient = pd.read_excel(settings['filepath_patient'], index_col=0)
     print('Create discharge_master')
     #df_master = pd.concat([df_data, df_pred, df_rfc, df_manual, df_track], axis=1)
     #df_master = pd.concat([df_data, df_pred, df_rfc, df_manual], axis=1)
@@ -1690,7 +1004,7 @@ def formatMaster(folderpath_master, master_process = False, format='ALL'):
     df_master = orderMasterData(df_master)
     #filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
 
-    writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
+    writer = pd.ExcelWriter(settings['filepath_master'], engine="openpyxl", mode="a")
     workbook  = writer.book
     
     colors=['A5A5A5', 'FFFF00', '70AD47', 'FFC000', '5B95F9']
@@ -1971,247 +1285,8 @@ def createPatient(folderpath_master):
     df_patient.to_excel(writer, sheet_name=sheet_name)
     writer.save()
 
-# def createStudy(folderpath_master, master_process=False, conf=True):
-#     print('Create StudyInstanceID table.')
-    
-#     CACS_NUM_MIN = 2
-#     CACS_IR_NUM_MIN = 1
-#     CACS_FBP_NUM_MIN = 1
-    
-#     CTA_NUM_MIN = 2
-#     CTA_IR_NUM_MIN = 1
-#     CTA_FBP_NUM_MIN = 1
-    
-#     NCS_CACS_NUM_MIN = 2
-#     NCS_CACS_IR_NUM_MIN = 1
-#     NCS_CACS_FBP_NUM_MIN = 1
-    
-#     NCS_CTA_NUM_MIN = 2
-#     NCS_CTA_IR_NUM_MIN = 1
-#     NCS_CTA_FBP_NUM_MIN = 1
 
-#     date = folderpath_master.split('_')[-1]
-#     folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-#     filepath_pred = os.path.join(folderpath_components, 'discharge_pred_' + date + '.xlsx')
-#     filepath_master_data = os.path.join(folderpath_components, 'discharge_master_data_' + date + '.xlsx')
-#     filepath_patient = os.path.join(folderpath_components, 'discharge_patient_' + date + '.xlsx')
-#     filepath_patient_conf = os.path.join(folderpath_components, 'discharge_patient_conf_' + date + '.xlsx')
-#     #filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-#     if master_process==False:
-#         filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-#     else:
-#         filepath_master_tmp = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-#         folderpath, filename, file_extension = splitFilePath(filepath_master_tmp)
-#         filepath_master = os.path.join(folderpath, filename + '_process' + file_extension)
-#     df_master = pd.read_excel(filepath_master, sheet_name='MASTER_'+ date, index_col=0)
-#     df_master.sort_index(inplace=True)
-#     #df_master_data = pd.read_excel(filepath_master_data, index_col=0)
-#     df_studyInstanceUID = pd.DataFrame(columns=['Site', 'PatientID', 'StudyInstanceUID', 'Modality', 'AcquisitionDate',
-#                                        'CACS_NUM', 'CACS_FBP_NUM', 'CACS_IR_NUM', 
-#                                        'CTA_NUM', 'CTA_FBP_NUM', 'CTA_IR_NUM', 
-#                                        'NCS_CACS_NUM', 'NCS_CACS_FBP_NUM', 'NCS_CACS_IR_NUM', 
-#                                        'NCS_CTA_NUM', 'NCS_CTA_FBP_NUM', 'NCS_CTA_IR_NUM',
-#                                        'ITT', 'STATUS', 'STATUS_MANUAL_CORRECTION', 'COMMENT'])
-#     df_studyInstanceUID_conf = pd.DataFrame(columns=['Site', 'PatientID', 'StudyInstanceUID', 'Modality', 'AcquisitionDate',
-#                                        'CACS_CONF', 'CACS_FBP_CONF', 'CACS_IR_CONF', 
-#                                        'CTA_CONF', 'CTA_FBP_CONF', 'CTA_IR_CONF', 
-#                                        'NCS_CACS_CONF', 'NCS_CACS_FBP_CONF', 'NCS_CACS_IR_CONF', 
-#                                        'NCS_CTA_CONF', 'NCS_CTA_FBP_CONF', 'NCS_CTA_IR_CONF',
-#                                        'ITT', 'STATUS', 'STATUS_MANUAL_CORRECTION', 'COMMENT'])
-
-#     # Filter study list
-#     func = lambda x: datetime.strptime(x, '%Y%m%d')
-#     patients = df_master['PatientID'].unique()
-#     firstdateList = []
-#     study_list = []
-    
-#     patients=['06-GOE-0020']
-    
-    
-#     for patient in patients:
-#         df_patient = df_master[(df_master['PatientID']==patient) &  (df_master['Modality']=='CT')]
-#         if len(df_patient)>0:
-#             firstdate = df_patient['1. Date of CT scan'].iloc[0]
-            
-#             studydate = df_patient['StudyDate']
-#             # Convert string to date and replace in df_patient
-#             studydate = studydate.apply(lambda x: datetime.strptime(str(x), '%Y%m%d'))
-#             df_patient['StudyDate'] = studydate
-            
-#             if not pd.isnull(firstdate):
-#                 df_study = df_patient[studydate == firstdate]
-#                 if len(df_study)>0:
-#                     df_study_id = df_study['StudyInstanceUID'].iloc[0]
-#                 else:
-#                     print('PROBLEM: Patient ' + patient + ' "1. Date of CT scan" not consistent with "StudyDate"')
-#                     df_study = df_patient
-#                     df_study = df_study.sort_values(by='StudyDate')
-#                     df_study_id = df_study['StudyInstanceUID'].iloc[0]
-#             else:
-#                 print('Patient: ' + patient + ' does not have a 1. Date of CT scan')
-#                 df_study = df_patient
-#                 df_study = df_study.sort_values(by='StudyDate')
-#                 df_study_id = df_study['StudyInstanceUID'].iloc[0]
-#             study_list.append(df_study_id)
-            
-#     def getConf(conf, NumSeries=1):
-#         conf = conf.sort_values(ascending=False)
-#         if len(conf)==0:
-#             return 0
-#         if len(conf) <= NumSeries:
-#             return conf.min()
-#         else:
-#             return conf[0:NumSeries].min()
-       
-
-#     for studyID in study_list:
-#         # if studyID == '1.2.840.113619.6.95.31.0.3.4.1.1018.13.10856850':
-#         #     sys.exit()
-#         #data = df_master_data[df_master_data['PatientID']==patientID]
-#         #if data['Modality'].iloc[0]=='CT':
-#         df_study = df_master[df_master['StudyInstanceUID']==studyID]
-#         # Extract CACS_NUM information
-#         CACS_MANUAL_OK = (df_study['ClassManualCorrection']=='UNDEFINED') | (df_study['ClassManualCorrection']=='CACS')
-#         #CACS_AUTO_OK = (df_study['CACSExtended']) & (df_study['ITT']<2)
-#         CACS_AUTO_OK = (df_study['RFCClass']=='CACSExtended') & (df_study['ITT']<2)
-#         CACS_NUM = (CACS_MANUAL_OK & CACS_AUTO_OK).sum()
-#         CACS_CONF = getConf(df_study[CACS_MANUAL_OK & CACS_AUTO_OK]['RFCConfidence'], NumSeries=CACS_NUM_MIN)
-        
-#         # Extract CACS_FBP_NUM information
-#         CACS_FBP_MANUAL_OK = (df_study['ClassManualCorrection']=='UNDEFINED') | (df_study['ClassManualCorrection']=='CACS')
-#         #CACS_FBP_AUTO_OK = (df_study['CACSExtended'])  & (df_study['RECO']=='FBP') & (df_study['ITT']<2)
-#         CACS_FBP_AUTO_OK = (df_study['RFCClass']=='CACSExtended')  & (df_study['RECO']=='FBP') & (df_study['ITT']<2)
-#         CACS_FBP_NUM = (CACS_FBP_MANUAL_OK & CACS_FBP_AUTO_OK).sum()
-#         CACS_FBP_CONF = getConf(df_study[CACS_MANUAL_OK & CACS_FBP_AUTO_OK]['RFCConfidence'], NumSeries=CACS_FBP_NUM_MIN)
-#         # Extract CACS_IR_NUM information
-#         CACS_IR_MANUAL_OK = (df_study['ClassManualCorrection']=='UNDEFINED') | (df_study['ClassManualCorrection']=='CACS')
-#         #CACS_IR_AUTO_OK = (df_study['CACSExtended']) & (df_study['RECO']=='IR') & (df_study['ITT']<2)
-#         CACS_IR_AUTO_OK = (df_study['RFCClass']=='CACSExtended') & (df_study['RECO']=='IR') & (df_study['ITT']<2)
-#         CACS_IR_NUM = (CACS_IR_MANUAL_OK & CACS_IR_AUTO_OK).sum()
-#         CACS_IR_CONF = getConf(df_study[CACS_MANUAL_OK & CACS_IR_AUTO_OK]['RFCConfidence'], NumSeries=CACS_IR_NUM_MIN)
-#         # Extract CTA_NUM information
-#         CTA_MANUAL_OK = (df_study['ClassManualCorrection']=='UNDEFINED') | (df_study['ClassManualCorrection']=='CTA')
-#         #CTA_AUTO_OK = (df_study['CTAExtended']) & (df_study['ITT']<2)
-#         CTA_AUTO_OK = (df_study['RFCClass']=='CTAExtended') & (df_study['ITT']<2)
-#         CTA_NUM = (CTA_MANUAL_OK & CTA_AUTO_OK).sum()  
-#         CTA_CONF = getConf(df_study[CTA_MANUAL_OK & CTA_AUTO_OK]['RFCConfidence'], NumSeries=CTA_NUM_MIN)
-#         # Extract CTA_FBP_NUM information
-#         CTA_FBP_MANUAL_OK = (df_study['ClassManualCorrection']=='UNDEFINED') | (df_study['ClassManualCorrection']=='CTA')
-#         #CTA_FBP_AUTO_OK = (df_study['CTAExtended'])  & (df_study['RECO']=='FBP') & (df_study['ITT']<2)
-#         CTA_FBP_AUTO_OK = (df_study['RFCClass']=='CTAExtended')  & (df_study['RECO']=='FBP') & (df_study['ITT']<2)
-#         CTA_FBP_NUM = (CTA_FBP_MANUAL_OK & CTA_FBP_AUTO_OK).sum()  
-#         CTA_FBP_CONF = getConf(df_study[CTA_FBP_MANUAL_OK & CTA_FBP_AUTO_OK]['RFCConfidence'], NumSeries=CTA_FBP_NUM_MIN)
-#         # Extract CTA_IR_NUM information
-#         CTA_IR_MANUAL_OK = (df_study['ClassManualCorrection']=='UNDEFINED') | (df_study['ClassManualCorrection']=='CTA')
-#         #CTA_IR_AUTO_OK = (df_study['CTAExtended'])  & (df_study['RECO']=='FBP') & (df_study['ITT']<2)
-#         CTA_IR_AUTO_OK = (df_study['RFCClass']=='CTAExtended')  & (df_study['RECO']=='FBP') & (df_study['ITT']<2)
-#         CTA_IR_NUM = (CTA_IR_MANUAL_OK & CTA_IR_AUTO_OK).sum()          
-#         CTA_IR_CONF = getConf(df_study[CTA_IR_MANUAL_OK & CTA_IR_AUTO_OK]['RFCConfidence'], NumSeries=CTA_IR_NUM_MIN)
-#         # Extract NCS_CACS_NUM information
-#         NCS_CACS_MANUAL_OK = (df_study['ClassManualCorrection']=='UNDEFINED') | (df_study['ClassManualCorrection']=='NCS_CACS')
-#         #NCS_CACS_AUTO_OK = (df_study['NCS_CACSExtended']) & (df_study['ITT']<2)
-#         NCS_CACS_AUTO_OK = (df_study['RFCClass']=='NCS_CACSExtended') & (df_study['ITT']<2)
-#         NCS_CACS_NUM = (NCS_CACS_MANUAL_OK & NCS_CACS_AUTO_OK).sum()    
-#         NCS_CACS_CONF = getConf(df_study[NCS_CACS_MANUAL_OK & NCS_CACS_AUTO_OK]['RFCConfidence'], NumSeries=NCS_CACS_NUM_MIN)
-#         # Extract NCS_CACS_FBP_NUM information
-#         NCS_CACS_FBP_MANUAL_OK = (df_study['ClassManualCorrection']=='UNDEFINED') | (df_study['ClassManualCorrection']=='NCS_CACS')
-#         #NCS_CACS_FBP_AUTO_OK = (df_study['NCS_CACSExtended']) & (df_study['RECO']=='FBP') & (df_study['ITT']<2)
-#         NCS_CACS_FBP_AUTO_OK = (df_study['RFCClass']=='NCS_CACSExtended') & (df_study['RECO']=='FBP') & (df_study['ITT']<2)
-#         NCS_CACS_FBP_NUM = (NCS_CACS_FBP_MANUAL_OK & NCS_CACS_FBP_AUTO_OK).sum()  
-#         NCS_CACS_FBP_CONF = getConf(df_study[NCS_CACS_FBP_MANUAL_OK & NCS_CACS_FBP_AUTO_OK]['RFCConfidence'], NumSeries=NCS_CACS_FBP_NUM_MIN)
-#         # Extract NCS_CACS_IR_NUM information
-#         NCS_CACS_IR_MANUAL_OK = (df_study['ClassManualCorrection']=='UNDEFINED') | (df_study['ClassManualCorrection']=='NCS_CACS')
-#         #NCS_CACS_IR_AUTO_OK = (df_study['NCS_CACSExtended']) & (df_study['RECO']=='IR') & (df_study['ITT']<2)
-#         NCS_CACS_IR_AUTO_OK = (df_study['RFCClass']=='NCS_CACSExtended') & (df_study['RECO']=='IR') & (df_study['ITT']<2)
-#         NCS_CACS_IR_NUM = (NCS_CACS_IR_MANUAL_OK & NCS_CACS_IR_AUTO_OK).sum()   
-#         NCS_CACS_IR_CONF = getConf(df_study[NCS_CACS_IR_MANUAL_OK & NCS_CACS_IR_AUTO_OK]['RFCConfidence'], NumSeries=NCS_CACS_IR_NUM_MIN)
-#         # Extract NCS_CACS_NUM information
-#         NCS_CTA_MANUAL_OK = (df_study['ClassManualCorrection']=='UNDEFINED') | (df_study['ClassManualCorrection']=='NCS_CTA')
-#         #NCS_CTA_AUTO_OK = (df_study['NCS_CTAExtended']) & (df_study['ITT']<2)
-#         NCS_CTA_AUTO_OK = (df_study['RFCClass']=='NCS_CTAExtended') & (df_study['ITT']<2)
-#         NCS_CTA_NUM = (NCS_CTA_MANUAL_OK & NCS_CTA_AUTO_OK).sum() 
-#         NCS_CTA_CONF = getConf(df_study[NCS_CTA_MANUAL_OK & NCS_CTA_AUTO_OK]['RFCConfidence'], NumSeries=NCS_CTA_NUM_MIN)
-#         # Extract NCS_CTA_FBP_NUM information
-#         NCS_CTA_FBP_MANUAL_OK = (df_study['ClassManualCorrection']=='UNDEFINED') | (df_study['ClassManualCorrection']=='NCS_CTA')
-#         #NCS_CTA_FBP_AUTO_OK = (df_study['NCS_CTAExtended']) & (df_study['RECO']=='FBP') & (df_study['ITT']<2)
-#         NCS_CTA_FBP_AUTO_OK = (df_study['RFCClass']=='NCS_CTAExtended') & (df_study['RECO']=='FBP') & (df_study['ITT']<2)
-#         NCS_CTA_FBP_NUM = (NCS_CTA_FBP_MANUAL_OK & NCS_CTA_FBP_AUTO_OK).sum() 
-#         NCS_CTA_FBP_CONF = getConf(df_study[NCS_CTA_FBP_MANUAL_OK & NCS_CTA_FBP_AUTO_OK]['RFCConfidence'], NumSeries=NCS_CTA_FBP_NUM_MIN)
-#         # Extract NCS_CTA_IR_NUM information
-#         NCS_CTA_IR_MANUAL_OK = (df_study['ClassManualCorrection']=='UNDEFINED') | (df_study['ClassManualCorrection']=='NCS_CTA')
-#         #NCS_CTA_IR_AUTO_OK = (df_study['NCS_CTAExtended']) & (df_study['RECO']=='IR') & (df_study['ITT']<2)
-#         NCS_CTA_IR_AUTO_OK = (df_study['RFCClass']=='NCS_CTAExtended') & (df_study['RECO']=='IR') & (df_study['ITT']<2)
-#         NCS_CTA_IR_NUM = (NCS_CTA_IR_MANUAL_OK & NCS_CTA_IR_AUTO_OK).sum() 
-#         NCS_CTA_IR_CONF = getConf(df_study[NCS_CTA_IR_MANUAL_OK & NCS_CTA_IR_AUTO_OK]['RFCConfidence'], NumSeries=NCS_CTA_IR_NUM_MIN)
-        
-#         PATIENTID = df_study['PatientID'].iloc[0]
-#         SITE = df_study['Site'].iloc[0]
-#         ITT = df_study['ITT'].iloc[0]
-#         modality = df_study['Modality'].iloc[0]
-#         DATE = df_study['AcquisitionDate'].iloc[0]
-#         #AcquisitionDate = df_study['AcquisitionDate'].iloc[0]
-        
-#         # Check patient scenario
-#         CACS_OK = CACS_NUM>=CACS_NUM_MIN
-#         CTA_OK = CTA_NUM>=CTA_NUM_MIN
-#         NCS_CACS_OK = NCS_CACS_NUM>=NCS_CACS_NUM_MIN
-#         NCS_CTA_OK = NCS_CTA_NUM>=NCS_CTA_NUM_MIN
-        
-#         if CACS_OK and CTA_OK and NCS_CACS_OK and NCS_CTA_OK:
-#             status = 'OK'
-#         elif ITT==2:
-#             status = 'EXCLUDED'
-#         elif not modality=='CT':
-#             status = 'NOT CT MODALITY'
-#         else:
-#             status=''
-#             if not CACS_OK:
-#                 status = status + 'MISSING_CACS, '
-#             if not CTA_OK:
-#                 status = status + 'MISSING_CTA, '
-#             if not NCS_CACS_OK:
-#                 status = status + 'MISSING_NCS_CACS, '
-#             if not NCS_CTA_OK:
-#                 status = status + 'MISSING_NCS_CTA, '
-            
-#         STATUS_MANUAL_CORRECTION = 'UNDEFINED'
-#         COMMENT = ''
-#         df_studyInstanceUID = df_studyInstanceUID.append({'Site': SITE, 'PatientID': PATIENTID, 'StudyInstanceUID': studyID, 'Modality': modality, 'AcquisitionDate': DATE, 'CACS_NUM': CACS_NUM, 'CACS_FBP_NUM': CACS_FBP_NUM, 'CACS_IR_NUM': CACS_IR_NUM,
-#                            'CTA_NUM': CTA_NUM, 'CTA_FBP_NUM': CTA_FBP_NUM, 'CTA_IR_NUM': CTA_IR_NUM,
-#                            'NCS_CACS_NUM': NCS_CACS_NUM, 'NCS_CACS_FBP_NUM': NCS_CACS_FBP_NUM, 'NCS_CACS_IR_NUM': NCS_CACS_IR_NUM,
-#                            'NCS_CTA_NUM': NCS_CTA_NUM, 'NCS_CTA_FBP_NUM': NCS_CTA_FBP_NUM, 'NCS_CTA_IR_NUM': NCS_CTA_IR_NUM,
-#                            'ITT': ITT, 'STATUS': status, 'STATUS_MANUAL_CORRECTION': STATUS_MANUAL_CORRECTION, 'COMMENT': COMMENT}, ignore_index=True)
-#         df_studyInstanceUID_conf = df_studyInstanceUID_conf.append({'Site': SITE, 'PatientID': PATIENTID, 'StudyInstanceUID': studyID, 'Modality': modality, 'AcquisitionDate': DATE, 'CACS_CONF': CACS_CONF, 'CACS_FBP_CONF': CACS_FBP_CONF, 'CACS_IR_CONF': CACS_IR_CONF,
-#                            'CTA_CONF': CTA_CONF, 'CTA_FBP_CONF': CTA_FBP_CONF, 'CTA_IR_CONF': CTA_IR_CONF,
-#                            'NCS_CACS_CONF': NCS_CACS_CONF, 'NCS_CACS_FBP_CONF': NCS_CACS_FBP_CONF, 'NCS_CACS_IR_CONF': NCS_CACS_IR_CONF,
-#                            'NCS_CTA_CONF': NCS_CTA_CONF, 'NCS_CTA_FBP_CONF': NCS_CTA_FBP_CONF, 'NCS_CTA_IR_CONF': NCS_CTA_IR_CONF,
-#                            'ITT': ITT, 'STATUS': status, 'STATUS_MANUAL_CORRECTION': STATUS_MANUAL_CORRECTION, 'COMMENT': COMMENT}, ignore_index=True)
-        
-#     df_studyInstanceUID.to_excel(filepath_patient)
-#     df_studyInstanceUID_conf.to_excel(filepath_patient_conf)
-
-#     writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
-#     # Remove sheet if already exist
-#     sheet_name = 'PATIENT_STATUS_' + date
-#     workbook  = writer.book
-#     sheetnames = workbook.sheetnames
-#     if sheet_name in sheetnames:
-#         sheet = workbook[sheet_name]
-#         workbook.remove(sheet)
-#     df_studyInstanceUID.to_excel(writer, sheet_name=sheet_name)
-        
-#     if conf:
-#         sheet_name = 'PATIENT_STATUS_CONF_' + date
-#         if sheet_name in sheetnames:
-#             sheet = workbook[sheet_name]
-#             workbook.remove(sheet)
-#         df_studyInstanceUID_conf.to_excel(writer, sheet_name=sheet_name)
-        
-#     # Add patient ro master
-    
-#     writer.save()
-
-def createStudy(folderpath_master, master_process=False, conf=True):
+def createStudy(settings):
     print('Create StudyInstanceID table.')
     
     CACS_NUM_MIN = 1
@@ -2230,20 +1305,22 @@ def createStudy(folderpath_master, master_process=False, conf=True):
     NCS_CTA_IR_NUM_MIN = 0
     NCS_CTA_FBP_NUM_MIN = 0
 
-    date = folderpath_master.split('_')[-1]
-    folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    filepath_pred = os.path.join(folderpath_components, 'discharge_pred_' + date + '.xlsx')
-    filepath_master_data = os.path.join(folderpath_components, 'discharge_master_data_' + date + '.xlsx')
-    filepath_patient = os.path.join(folderpath_components, 'discharge_patient_' + date + '.xlsx')
-    filepath_patient_conf = os.path.join(folderpath_components, 'discharge_patient_conf_' + date + '.xlsx')
+    #date = folderpath_master.split('_')[-1]
+    #folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
+    #filepath_pred = os.path.join(folderpath_components, 'discharge_pred_' + date + '.xlsx')
+    #filepath_master_data = os.path.join(folderpath_components, 'discharge_master_data_' + date + '.xlsx')
+    #filepath_patient = os.path.join(folderpath_components, 'discharge_patient_' + date + '.xlsx')
+    #filepath_patient_conf = os.path.join(folderpath_components, 'discharge_patient_conf_' + date + '.xlsx')
     #filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    if master_process==False:
-        filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    else:
-        filepath_master_tmp = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-        folderpath, filename, file_extension = splitFilePath(filepath_master_tmp)
-        filepath_master = os.path.join(folderpath, filename + '_process' + file_extension)
-    df_master = pd.read_excel(filepath_master, sheet_name='MASTER_'+ date, index_col=0)
+    # if master_process==False:
+    #     filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
+    # else:
+    #     filepath_master_tmp = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
+    #     folderpath, filename, file_extension = splitFilePath(filepath_master_tmp)
+    #     filepath_master = os.path.join(folderpath, filename + '_process' + file_extension)
+    
+    filepath_patient = settings['filepath_patient']
+    df_master = pd.read_excel(settings['filepath_master'], sheet_name='MASTER_'+ settings['date'], index_col=0)
     df_master.sort_index(inplace=True)
     #df_master_data = pd.read_excel(filepath_master_data, index_col=0)
     df_PatientID = pd.DataFrame(columns=['Site', 'PatientID', 'StudyInstanceUID', 'Modality', 'AcquisitionDate',
@@ -2455,17 +1532,14 @@ def createStudy(folderpath_master, master_process=False, conf=True):
     
     writer.save()
     
-def extractHist():
+def extractHist(settings):
 
-    filepath = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_01042020/discharge_master_01042020.xlsx'
-    filepath_hist = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_01042020/discharge_master_01042020_hist.pkl'
-    folderpath_images = 'G:/discharge'
-    df = pd.read_excel(filepath, sheet_name ='MASTER_01042020', index_col=0)
+    df = pd.read_excel(settings['filepath_master'], sheet_name ='MASTER_' + settings['date'], index_col=0)
     df.sort_index(inplace=True)
     bins = 100   
-    columns =['SeriesInstanceUID', 'Count', 'CLASSExtended'] + [str(x) for x in range(0,bins)]
-    if os.path.exists(filepath_hist):
-        dfHist = pd.read_pickle(filepath_hist)
+    columns =['SeriesInstanceUID', 'Count', 'CLASS'] + [str(x) for x in range(0,bins)]
+    if os.path.exists(settings['filepath_hist']):
+        dfHist = pd.read_pickle(settings['filepath_hist'])
     else:
         dfHist = pd.DataFrame('', index=np.arange(len(df)), columns=columns)
     
@@ -2487,28 +1561,27 @@ def extractHist():
                 print('Series modality is not CT')
                 dfHist.loc[index,'SeriesInstanceUID'] = SeriesInstanceUID
                 dfHist.loc[index,'Count'] = -1
-                dfHist.loc[index,'CLASSExtended'] = row['CLASSExtended']
+                dfHist.loc[index,'CLASS'] = row['CLASS']
                 dfHist.iloc[index,3:] = np.ones((1, bins))*-1
             else:
                 try:
                     patient=CTPatient(StudyInstanceUID, PatientID)
-                    #series = patient.loadSeries(folderpath_images, SeriesInstanceUID, SOPInstanceUID)
-                    series = patient.loadSeries(folderpath_images, SeriesInstanceUID, None)
+                    series = patient.loadSeries(settings['folderpath_discharge'], SeriesInstanceUID, None)
                     image = series.image.image()
                     hist = np.histogram(image, bins=bins, range=(-2500, 3000))[0]
                     dfHist.loc[index,'SeriesInstanceUID'] = SeriesInstanceUID
                     dfHist.loc[index,'Count'] = image.shape[0]
-                    dfHist.loc[index,'CLASSExtended'] = row['CLASSExtended']
+                    dfHist.loc[index,'CLASS'] = row['CLASS']
                     dfHist.iloc[index,3:] = hist
                 except:
                     print('Error index', index)
                     dfHist.loc[index,'SeriesInstanceUID'] = SeriesInstanceUID
                     dfHist.loc[index,'Count'] = -1
-                    dfHist.loc[index,'CLASSExtended'] = row['CLASSExtended']
+                    dfHist.loc[index,'CLASS'] = row['CLASS']
                     dfHist.iloc[index,3:] = np.ones((1, bins))*-1
         if index % 10 == 0:
-            dfHist.to_pickle(filepath_hist)
-    dfHist.to_pickle(filepath_hist)
+            dfHist.to_pickle(settings['filepath_hist'])
+    dfHist.to_pickle(settings['filepath_hist'])
 
 def checkFileSize():
 
@@ -2608,147 +1681,39 @@ def checkMultiSlice():
     df_multi.to_excel(writer, sheet_name='FileSizeFailed')
     writer.save()
 
-def extractDICOMTags(folderpath_tables, folderpath_discharge):
-    root = folderpath_discharge
-    fout = os.path.join(folderpath_tables, 'discharge_dicom.xlsx')
-    extract_specific_tags(root, fout, NumSamples=None)
-    
-def createInitialMaster():
-    # Create initial master
-    folderpath_tables = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_tables'
-    folderpath_master_before = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master'
-    folderpath_discharge = 'G:/discharge'
-    folderpath_master = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_01042020'
-    #NumSamples=(0, 2000)
-    NumSamples=None
-    
-    # Extract dicom tags
-    ##extractDICOMTags(folderpath_tables, folderpath_discharge)
-    # Create tables
-    createTables(folderpath_discharge, folderpath_master, folderpath_tables)
-    # Create data
-    createData(folderpath_master, NumSamples=NumSamples)
-    # Create random forest classification columns
-    createRFClassification(folderpath_master)
-    # Create manual selection
-    createManualSelection(folderpath_master)
-    # Create prediction 
-    createPredictions(folderpath_master)
-    # Merge master 
-    mergeMaster(folderpath_master, folderpath_master_before)
-    # Create tracking table 
-    createTrackingTable(folderpath_master)
-    updateMasterFromTrackingTable(folderpath_master)
-    # Init RF classifier
-    initRFClassification(folderpath_master)
-    classifieRFClassification(folderpath_master)
-    # Merge study sheet 
-    createStudy(folderpath_master, conf=True)
-    # Format master
-    formatMaster(folderpath_master)
 
-    # # Create tables
-    # createTables(folderpath_discharge, folderpath_master, folderpath_tables)
-    # # Create data
-    # createData(folderpath_master, NumSamples=NumSamples)
-    # # Create random forest classification columns
-    # createRFClassification(folderpath_master)
-    # # Create manual selection
-    # createManualSelection(folderpath_master)
-    # # Create prediction 
-    # createPredictions(folderpath_master)
-    # # Create tracking data 
-    # #createTracking(folderpath_master)
-    # # Merge master 
-    # mergeMaster(folderpath_master, folderpath_master_before)
+def createMaster():
     
-    # createStudy(folderpath_master, conf=True)
-    # formatMaster(folderpath_master)
-    
-    # createTrackingTable(folderpath_master)
-    # updateMasterFromTrackingTable(folderpath_master)
-    # #updateTrackingTableFromMaster(folderpath_master)
-    
-    
-    # # Format master
-    # formatMaster(folderpath_master)
-    # # Create process version
-    # createMasterProcess(folderpath_master)
-    # formatMaster(folderpath_master, master_process=True)
-    # # Init RF classifier
-    # initRFClassification(folderpath_master)
-    #classifieRFClassification(folderpath_master)
-    
-    # createMasterProcess(folderpath_master)
-    # classifieRFClassification(folderpath_master, master_process=True)
-    # formatMaster(folderpath_master, master_process=True)
-    
-    # createStudy(folderpath_master, master_process=True)
-    # createTrackingTable(folderpath_master, master_process=True)
-    # formatMaster(folderpath_master, master_process=True)
-    
-    # # Clssifie with RF
-    # classifieRFClassification(folderpath_master)
-    # formatMaster(folderpath_master, master_process=True)
-
-def updateMaster():
-    # Define filepath
-    folderpath_tables = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_tables'
-    folderpath_master_before = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master'
-    folderpath_discharge = 'G:/discharge'
-    folderpath_master = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_01052020'
-    #NumSamples=(26228, 26747)
-    NumSamples=(0, 2000)
-    
-    
-    # Create tables
-    createTables(folderpath_discharge, folderpath_master, folderpath_tables)
-    # Create data
-    createData(folderpath_master, NumSamples=NumSamples)
-    # Update data
-    updateData(folderpath_master, folderpath_master_before)
-    # Update random forest classification
-    updateRFClassification(folderpath_master, folderpath_master_before)
-    # Update manual selection
-    updateManualSelection(folderpath_master, folderpath_master_before)
-    # Update prediction
-    updatePredictions(folderpath_master)
-    # Update tracking
-    updateTracking(folderpath_master, folderpath_master_before)
-    # Merge new master
-    mergeMaster(folderpath_master, folderpath_master_before)
-    # Update patient table
-    updatePatient(folderpath_master, folderpath_master_before)
-    # Format master 
-    formatMaster(folderpath_master)
-    # Create master process
-    createMasterProcess(folderpath_master)
-    # Format master process
-    formatMaster(folderpath_master, master_process=True)
-    # Update rando forest classification
-    createRFClassification(folderpath_master, mode='classifie')
-                
-def test():
-    # Create initial master
-    createInitialMaster()
-        
-    # Update master
-    updateMaster()
+    # Load settings
+    filepath_settings = 'H:/cloud/cloud_data/Projects/DISCHARGEMaster/data/settings.json'
+    settings=initSettings()
+    saveSettings(settings, filepath_settings)
+    settings = fillSettingsTags(loadSettings(filepath_settings))
     
     # Extract histograms
-    extractHist()
+    #extractHist(settings)
+    # Extract dicom tags
+    #extractDICOMTags(settings, NumSamples=10)
+    # Create tables
+    checkTables(settings)
+    # Create data
+    createData(settings)
+    # Create random forest classification columns
+    createRFClassification(settings)
+    # Create manual selection
+    createManualSelection(settings)
+    # Create prediction 
+    createPredictions(settings)
+    # Merge master 
+    mergeMaster(settings)
+    # Create tracking table 
+    createTrackingTable(settings)
+    updateMasterFromTrackingTable(settings)
+    # Init RF classifier
+    initRFClassification(settings)
+    classifieRFClassification(settings)
+    # Merge study sheet 
+    createStudy(settings)
+    # Format master
+    formatMaster(settings)
 
-#########  TODO  ###############
-
-#extractHist()
-
-#createInitialMaster()
-
-#checkFileSize()
-
-#checkMultiSlice()
-
-# Extract dicom tags
-# folderpath_tables = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_tables'
-# folderpath_discharge = 'G:/discharge'
-# extractDICOMTags(folderpath_tables, folderpath_discharge)
