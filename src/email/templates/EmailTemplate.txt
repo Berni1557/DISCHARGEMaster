@@ -1,0 +1,12 @@
+Email: EMAIL
+
+Dear ...
+
+Please find following comments which are applicable for all of the mentioned patients:
+- PatientID: PATIENTID
+	o Problem: PROBLEM
+
+Could you please provide the missing images?
+
+Thanks in advance,
+Eser

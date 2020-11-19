@@ -1,0 +1,15 @@
+Email: xxx@charite.de
+
+Dear ...
+
+Please find following comments which are applicable for all of the mentioned patients:
+
+Missing ICA images.
+
+For the patients:
+02-INN-0022, 
+
+CT Date in eCRF is not the same with the Date of the CT images. Please control the images.
+
+Thanks in advance,
+Eser

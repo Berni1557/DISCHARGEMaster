@@ -1,0 +1,15 @@
+Email: EMAIL
+
+Dear ...
+
+Please find following comments which are applicable for all of the mentioned patients:
+
+Missing ICA images.
+
+For the patients:
+PATIENTIDLIST
+
+PROBLEM
+
+Thanks in advance,
+Eser
