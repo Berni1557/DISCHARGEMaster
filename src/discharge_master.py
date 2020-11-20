@@ -4,10 +4,9 @@ Created on Wed May 13 13:59:31 2020
 
 @author: bernifoellmer
 """
-
+import sys, os
 sys.path.append('H:/cloud/cloud_data/Projects/DL/Code/src')
 sys.path.append('H:/cloud/cloud_data/Projects/DL/Code/src/ct')
-import sys, os
 import pandas as pd
 import ntpath
 import datetime
@@ -26,8 +25,8 @@ import keyboard
 from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.formatting import Rule
 from settings import initSettings, saveSettings, loadSettings, fillSettingsTags
-from classification import createRFClassification, initRFClassification
-from filterTenStepsGuide import filter_CACS_10StepsGuide, filter_CACS, filter_NCS, filterReconstruction, filter_CTA
+from classification import createRFClassification, initRFClassification, classifieRFClassification
+from filterTenStepsGuide import filter_CACS_10StepsGuide, filter_CACS, filter_NCS, filterReconstruction, filter_CTA, filer10StepsGuide
 
 tags_dicom=['Count', 'Site', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID',
         'Modality', 'SeriesNumber', 'SeriesDescription', 'AcquisitionDate',
@@ -612,7 +611,7 @@ def createPredictions(settings):
     df_pred['ICA'] = df['ICA']
  
     # Filter by reconstruction
-    df = filterReconstruction(df_data)
+    df = filterReconstruction(df_data, settings)
     df_pred['RECO'] = df['RECO']
     
     # Filter by reconstruction
@@ -869,7 +868,7 @@ def updateMasterFromTrackingTable(settings):
     
     
     # Update master
-    writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
+    writer = pd.ExcelWriter(settings['filepath_master'], engine="openpyxl", mode="a")
     # Remove sheet if already exist
     sheet_name = 'TRACKING' + '_' + settings['date']
     workbook  = writer.book
@@ -934,8 +933,8 @@ def mergeMaster(settings):
     df_manual = pd.read_excel(settings['filepath_manual'], index_col=0)
     print('Read discharge_track')
     print('Create discharge_master')
-    df_master = pd.concat([df_master_data, df_pred, df_rfc, df_manual, df_reco], axis=1)
-    df_master = orderMasterData(df_master, settings)
+    df_master = pd.concat([df_data, df_pred, df_rfc, df_manual, df_reco], axis=1)
+    #df_master = orderMasterData(df_master, settings)
 
     writer = pd.ExcelWriter(settings['filepath_master'], engine="openpyxl", mode="w")
     df_master.to_excel(writer, sheet_name = 'MASTER' + '_' + settings['date'])
@@ -994,14 +993,14 @@ def formatMaster(settings, format='ALL'):
     print('Read discharge_manual')
     df_manual = pd.read_excel(settings['filepath_manual'], index_col=0)
     print('Read discharge_track')
-    df_track = pd.read_excel(settings['filepath_track'], index_col=0)
+    df_track = pd.read_excel(settings['filepath_master_track'], index_col=0)
     print('Read patient_data')
     df_patient = pd.read_excel(settings['filepath_patient'], index_col=0)
     print('Create discharge_master')
     #df_master = pd.concat([df_data, df_pred, df_rfc, df_manual, df_track], axis=1)
     #df_master = pd.concat([df_data, df_pred, df_rfc, df_manual], axis=1)
-    df_master = pd.read_excel(filepath_master, sheet_name='MASTER_' + date, index_col=0)
-    df_master = orderMasterData(df_master)
+    df_master = pd.read_excel(settings['filepath_master'], sheet_name='MASTER_' + settings['date'], index_col=0)
+    df_master = orderMasterData(df_master, settings)
     #filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
 
     writer = pd.ExcelWriter(settings['filepath_master'], engine="openpyxl", mode="a")
@@ -1097,7 +1096,7 @@ def formatMaster(settings, format='ALL'):
             
         if 'TRACKING' in sheetname and (format=='ALL' or format=='TRACKING'):
             
-            dft = pd.read_excel(filepath_master, sheet_name=sheetname, index_col=0)
+            dft = pd.read_excel(settings['filepath_master'], sheet_name=sheetname, index_col=0)
             
             # Clear existing conditional_formatting list
             sheet.conditional_formatting = ConditionalFormattingList()
@@ -1158,136 +1157,138 @@ def updatePatient(folderpath_master, folderpath_master_before):
     df_patient.to_excel(writer, sheet_name=sheet_name)
     writer.save()
     
-def createPatient(folderpath_master):
-    print('Create patient table.')
+# def createPatient(folderpath_master):
+#     print('Create patient table.')
 
-    date = folderpath_master.split('_')[-1]
-    folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    filepath_pred = os.path.join(folderpath_components, 'discharge_pred_' + date + '.xlsx')
-    filepath_master_data = os.path.join(folderpath_components, 'discharge_master_data_' + date + '.xlsx')
-    filepath_patient = os.path.join(folderpath_components, 'discharge_patient_' + date + '.xlsx')
-    filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
+#     date = folderpath_master.split('_')[-1]
+#     folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
+#     filepath_pred = os.path.join(folderpath_components, 'discharge_pred_' + date + '.xlsx')
+#     filepath_master_data = os.path.join(folderpath_components, 'discharge_master_data_' + date + '.xlsx')
+#     filepath_patient = os.path.join(folderpath_components, 'discharge_patient_' + date + '.xlsx')
+#     filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
     
-    df_master = pd.read_excel(filepath_master, sheet_name='MASTER_'+ date, index_col=0)
-    df_master_data = pd.read_excel(filepath_master_data, index_col=0)
-    #df_pred = pd.read_excel(filepath_pred, index_col=0)
-    #df_pred['CTAExtended'] = df_pred['CTAExtended'].astype('bool')
-    df_patient = pd.DataFrame(columns=['Site', 'PatientID', 'Modality', 'AcquisitionDate',
-                                       'CACS_NUM', 'CACS_FBP_NUM', 'CACS_IR_NUM', 
-                                       'CTA_NUM', 'CTA_FBP_NUM', 'CTA_IR_NUM', 
-                                       'NCS_CACS_NUM', 'NCS_CACS_FBP_NUM', 'NCS_CACS_IR_NUM', 
-                                       'NCS_CTA_NUM', 'NCS_CTA_FBP_NUM', 'NCS_CTA_IR_NUM',
-                                       'ITT', 'STATUS', 'STATUS_MANUAL_CORRECTION', 'COMMENT'])
+#     df_master = pd.read_excel(filepath_master, sheet_name='MASTER_'+ date, index_col=0)
+#     df_master_data = pd.read_excel(filepath_master_data, index_col=0)
+#     #df_pred = pd.read_excel(filepath_pred, index_col=0)
+#     #df_pred['CTAExtended'] = df_pred['CTAExtended'].astype('bool')
+#     df_patient = pd.DataFrame(columns=['Site', 'PatientID', 'Modality', 'AcquisitionDate',
+#                                        'CACS_NUM', 'CACS_FBP_NUM', 'CACS_IR_NUM', 
+#                                        'CTA_NUM', 'CTA_FBP_NUM', 'CTA_IR_NUM', 
+#                                        'NCS_CACS_NUM', 'NCS_CACS_FBP_NUM', 'NCS_CACS_IR_NUM', 
+#                                        'NCS_CTA_NUM', 'NCS_CTA_FBP_NUM', 'NCS_CTA_IR_NUM',
+#                                        'ITT', 'STATUS', 'STATUS_MANUAL_CORRECTION', 'COMMENT'])
 
-    patient_list = df_master_data['PatientID'].unique()
-    for patientID in patient_list:
-        #data = df_master_data[df_master_data['PatientID']==patientID]
-        #if data['Modality'].iloc[0]=='CT':
-        df_pat = df_master[df_master['PatientID']==patientID]
-        # Extract CACS_NUM information
-        CACS_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='CACS')
-        CACS_AUTO_OK = (df_pat['CACSExtended']) & (df_pat['ITT']<2)
-        CACS_NUM = (CACS_MANUAL_OK & CACS_AUTO_OK).sum()
-        # Extract CACS_FBP_NUM information
-        CACS_FBP_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='CACS')
-        CACS_FBP_AUTO_OK = (df_pat['CACSExtended'])  & (df_pat['RECO']=='FBP') & (df_pat['ITT']<2)
-        CACS_FBP_NUM = (CACS_MANUAL_OK & CACS_FBP_AUTO_OK).sum()
-        # Extract CACS_IR_NUM information
-        CACS_IR_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='CACS')
-        CACS_IR_AUTO_OK = (df_pat['CACSExtended']) & (df_pat['RECO']=='IR') & (df_pat['ITT']<2)
-        CACS_IR_NUM = (CACS_MANUAL_OK & CACS_IR_AUTO_OK).sum()    
-        # Extract CTA_NUM information
-        CTA_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='CTA')
-        CTA_AUTO_OK = (df_pat['CTAExtended']) & (df_pat['ITT']<2)
-        CTA_NUM = (CTA_MANUAL_OK & CTA_AUTO_OK).sum()   
-        # Extract CTA_FBP_NUM information
-        CTA_FBP_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='CTA')
-        CTA_FBP_AUTO_OK = (df_pat['CTAExtended'])  & (df_pat['RECO']=='FBP') & (df_pat['ITT']<2)
-        CTA_FBP_NUM = (CTA_FBP_MANUAL_OK & CTA_FBP_AUTO_OK).sum()  
-        # Extract CTA_IR_NUM information
-        CTA_IR_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='CTA')
-        CTA_IR_AUTO_OK = (df_pat['CTAExtended'])  & (df_pat['RECO']=='FBP') & (df_pat['ITT']<2)
-        CTA_IR_NUM = (CTA_IR_MANUAL_OK & CTA_IR_AUTO_OK).sum()          
-        # Extract NCS_CACS_NUM information
-        NCS_CACS_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='NCS_CACS')
-        NCS_CACS_AUTO_OK = (df_pat['NCS_CACSExtended']) & (df_pat['ITT']<2)
-        NCS_CACS_NUM = (NCS_CACS_MANUAL_OK & NCS_CACS_AUTO_OK).sum()       
-        # Extract NCS_CACS_FBP_NUM information
-        NCS_CACS_FBP_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='NCS_CACS')
-        NCS_CACS_FBP_AUTO_OK = (df_pat['NCS_CACSExtended']) & (df_pat['RECO']=='FBP') & (df_pat['ITT']<2)
-        NCS_CACS_FBP_NUM = (NCS_CACS_FBP_MANUAL_OK & NCS_CACS_FBP_AUTO_OK).sum()   
-        # Extract NCS_CACS_IR_NUM information
-        NCS_CACS_IR_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='NCS_CACS')
-        NCS_CACS_IR_AUTO_OK = (df_pat['NCS_CACSExtended']) & (df_pat['RECO']=='IR') & (df_pat['ITT']<2)
-        NCS_CACS_IR_NUM = (NCS_CACS_IR_MANUAL_OK & NCS_CACS_IR_AUTO_OK).sum()   
-        # Extract NCS_CACS_NUM information
-        NCS_CTA_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='NCS_CTA')
-        NCS_CTA_AUTO_OK = (df_pat['NCS_CTAExtended']) & (df_pat['ITT']<2)
-        NCS_CTA_NUM = (NCS_CTA_MANUAL_OK & NCS_CTA_AUTO_OK).sum()  
-        # Extract NCS_CTA_FBP_NUM information
-        NCS_CTA_FBP_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='NCS_CTA')
-        NCS_CTA_FBP_AUTO_OK = (df_pat['NCS_CTAExtended']) & (df_pat['RECO']=='FBP') & (df_pat['ITT']<2)
-        NCS_CTA_FBP_NUM = (NCS_CTA_FBP_MANUAL_OK & NCS_CTA_FBP_AUTO_OK).sum() 
-        # Extract NCS_CTA_IR_NUM information
-        NCS_CTA_IR_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='NCS_CTA')
-        NCS_CTA_IR_AUTO_OK = (df_pat['NCS_CTAExtended']) & (df_pat['RECO']=='IR') & (df_pat['ITT']<2)
-        NCS_CTA_IR_NUM = (NCS_CTA_IR_MANUAL_OK & NCS_CTA_IR_AUTO_OK).sum() 
+#     patient_list = df_master_data['PatientID'].unique()
+#     for patientID in patient_list:
+#         #data = df_master_data[df_master_data['PatientID']==patientID]
+#         #if data['Modality'].iloc[0]=='CT':
+#         df_pat = df_master[df_master['PatientID']==patientID]
+#         # Extract CACS_NUM information
+#         CACS_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='CACS')
+#         CACS_AUTO_OK = (df_pat['CACSExtended']) & (df_pat['ITT']<2)
+#         CACS_NUM = (CACS_MANUAL_OK & CACS_AUTO_OK).sum()
+#         # Extract CACS_FBP_NUM information
+#         CACS_FBP_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='CACS')
+#         CACS_FBP_AUTO_OK = (df_pat['CACSExtended'])  & (df_pat['RECO']=='FBP') & (df_pat['ITT']<2)
+#         CACS_FBP_NUM = (CACS_MANUAL_OK & CACS_FBP_AUTO_OK).sum()
+#         # Extract CACS_IR_NUM information
+#         CACS_IR_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='CACS')
+#         CACS_IR_AUTO_OK = (df_pat['CACSExtended']) & (df_pat['RECO']=='IR') & (df_pat['ITT']<2)
+#         CACS_IR_NUM = (CACS_MANUAL_OK & CACS_IR_AUTO_OK).sum()    
+#         # Extract CTA_NUM information
+#         CTA_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='CTA')
+#         CTA_AUTO_OK = (df_pat['CTAExtended']) & (df_pat['ITT']<2)
+#         CTA_NUM = (CTA_MANUAL_OK & CTA_AUTO_OK).sum()   
+#         # Extract CTA_FBP_NUM information
+#         CTA_FBP_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='CTA')
+#         CTA_FBP_AUTO_OK = (df_pat['CTAExtended'])  & (df_pat['RECO']=='FBP') & (df_pat['ITT']<2)
+#         CTA_FBP_NUM = (CTA_FBP_MANUAL_OK & CTA_FBP_AUTO_OK).sum()  
+#         # Extract CTA_IR_NUM information
+#         CTA_IR_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='CTA')
+#         CTA_IR_AUTO_OK = (df_pat['CTAExtended'])  & (df_pat['RECO']=='FBP') & (df_pat['ITT']<2)
+#         CTA_IR_NUM = (CTA_IR_MANUAL_OK & CTA_IR_AUTO_OK).sum()          
+#         # Extract NCS_CACS_NUM information
+#         NCS_CACS_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='NCS_CACS')
+#         NCS_CACS_AUTO_OK = (df_pat['NCS_CACSExtended']) & (df_pat['ITT']<2)
+#         NCS_CACS_NUM = (NCS_CACS_MANUAL_OK & NCS_CACS_AUTO_OK).sum()       
+#         # Extract NCS_CACS_FBP_NUM information
+#         NCS_CACS_FBP_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='NCS_CACS')
+#         NCS_CACS_FBP_AUTO_OK = (df_pat['NCS_CACSExtended']) & (df_pat['RECO']=='FBP') & (df_pat['ITT']<2)
+#         NCS_CACS_FBP_NUM = (NCS_CACS_FBP_MANUAL_OK & NCS_CACS_FBP_AUTO_OK).sum()   
+#         # Extract NCS_CACS_IR_NUM information
+#         NCS_CACS_IR_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='NCS_CACS')
+#         NCS_CACS_IR_AUTO_OK = (df_pat['NCS_CACSExtended']) & (df_pat['RECO']=='IR') & (df_pat['ITT']<2)
+#         NCS_CACS_IR_NUM = (NCS_CACS_IR_MANUAL_OK & NCS_CACS_IR_AUTO_OK).sum()   
+#         # Extract NCS_CACS_NUM information
+#         NCS_CTA_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='NCS_CTA')
+#         NCS_CTA_AUTO_OK = (df_pat['NCS_CTAExtended']) & (df_pat['ITT']<2)
+#         NCS_CTA_NUM = (NCS_CTA_MANUAL_OK & NCS_CTA_AUTO_OK).sum()  
+#         # Extract NCS_CTA_FBP_NUM information
+#         NCS_CTA_FBP_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='NCS_CTA')
+#         NCS_CTA_FBP_AUTO_OK = (df_pat['NCS_CTAExtended']) & (df_pat['RECO']=='FBP') & (df_pat['ITT']<2)
+#         NCS_CTA_FBP_NUM = (NCS_CTA_FBP_MANUAL_OK & NCS_CTA_FBP_AUTO_OK).sum() 
+#         # Extract NCS_CTA_IR_NUM information
+#         NCS_CTA_IR_MANUAL_OK = (df_pat['ClassManualCorrection']=='UNDEFINED') | (df_pat['ClassManualCorrection']=='NCS_CTA')
+#         NCS_CTA_IR_AUTO_OK = (df_pat['NCS_CTAExtended']) & (df_pat['RECO']=='IR') & (df_pat['ITT']<2)
+#         NCS_CTA_IR_NUM = (NCS_CTA_IR_MANUAL_OK & NCS_CTA_IR_AUTO_OK).sum() 
         
 
-        SITE = df_pat['Site'].iloc[0]
-        ITT = df_pat['ITT'].iloc[0]
-        modality = df_pat['Modality'].iloc[0]
-        #AcquisitionDate = df_pat['AcquisitionDate'].iloc[0]
+#         SITE = df_pat['Site'].iloc[0]
+#         ITT = df_pat['ITT'].iloc[0]
+#         modality = df_pat['Modality'].iloc[0]
+#         #AcquisitionDate = df_pat['AcquisitionDate'].iloc[0]
         
-        # Check patient scenario
-        CACS_OK = CACS_NUM>=2
-        CTA_OK = CTA_NUM>=2
-        NCS_CACS_OK = NCS_CACS_NUM>=2
-        NCS_CTA_OK = NCS_CTA_NUM>=2
+#         # Check patient scenario
+#         CACS_OK = CACS_NUM>=2
+#         CTA_OK = CTA_NUM>=2
+#         NCS_CACS_OK = NCS_CACS_NUM>=2
+#         NCS_CTA_OK = NCS_CTA_NUM>=2
         
-        if CACS_OK and CTA_OK and NCS_CACS_OK and NCS_CTA_OK:
-            status = 'OK'
-        elif ITT==2:
-            status = 'EXCLUDED'
-        elif not modality=='CT':
-            status = 'NOT CT MODALITY'
-        else:
-            status=''
-            if not CACS_OK:
-                status = status + 'MISSING_CACS, '
-            if not CTA_OK:
-                status = status + 'MISSING_CTA, '
-            if not NCS_CACS_OK:
-                status = status + 'MISSING_NCS_CACS, '
-            if not NCS_CTA_OK:
-                status = status + 'MISSING_NCS_CTA, '
+#         if CACS_OK and CTA_OK and NCS_CACS_OK and NCS_CTA_OK:
+#             status = 'OK'
+#         elif ITT==2:
+#             status = 'EXCLUDED'
+#         elif not modality=='CT':
+#             status = 'NOT CT MODALITY'
+#         else:
+#             status=''
+#             if not CACS_OK:
+#                 status = status + 'MISSING_CACS, '
+#             if not CTA_OK:
+#                 status = status + 'MISSING_CTA, '
+#             if not NCS_CACS_OK:
+#                 status = status + 'MISSING_NCS_CACS, '
+#             if not NCS_CTA_OK:
+#                 status = status + 'MISSING_NCS_CTA, '
             
-        STATUS_MANUAL_CORRECTION = 'UNDEFINED'
-        COMMENT = ''
-        df_patient = df_patient.append({'Site': SITE, 'PatientID': patientID, 'Modality': modality, 'CACS_NUM': CACS_NUM, 'CACS_FBP_NUM': CACS_FBP_NUM, 'CACS_IR_NUM': CACS_IR_NUM,
-                           'CTA_NUM': CTA_NUM, 'CTA_FBP_NUM': CTA_FBP_NUM, 'CTA_IR_NUM': CTA_IR_NUM,
-                           'NCS_CACS_NUM': NCS_CACS_NUM, 'NCS_CACS_FBP_NUM': NCS_CACS_FBP_NUM, 'NCS_CACS_IR_NUM': NCS_CACS_IR_NUM,
-                           'NCS_CTA_NUM': NCS_CTA_NUM, 'NCS_CTA_FBP_NUM': NCS_CTA_FBP_NUM, 'NCS_CTA_IR_NUM': NCS_CTA_IR_NUM,
-                           'ITT': ITT, 'STATUS': status, 'STATUS_MANUAL_CORRECTION': STATUS_MANUAL_CORRECTION, 'COMMENT': COMMENT}, ignore_index=True)
+#         STATUS_MANUAL_CORRECTION = 'UNDEFINED'
+#         COMMENT = ''
+#         df_patient = df_patient.append({'Site': SITE, 'PatientID': patientID, 'Modality': modality, 'CACS_NUM': CACS_NUM, 'CACS_FBP_NUM': CACS_FBP_NUM, 'CACS_IR_NUM': CACS_IR_NUM,
+#                            'CTA_NUM': CTA_NUM, 'CTA_FBP_NUM': CTA_FBP_NUM, 'CTA_IR_NUM': CTA_IR_NUM,
+#                            'NCS_CACS_NUM': NCS_CACS_NUM, 'NCS_CACS_FBP_NUM': NCS_CACS_FBP_NUM, 'NCS_CACS_IR_NUM': NCS_CACS_IR_NUM,
+#                            'NCS_CTA_NUM': NCS_CTA_NUM, 'NCS_CTA_FBP_NUM': NCS_CTA_FBP_NUM, 'NCS_CTA_IR_NUM': NCS_CTA_IR_NUM,
+#                            'ITT': ITT, 'STATUS': status, 'STATUS_MANUAL_CORRECTION': STATUS_MANUAL_CORRECTION, 'COMMENT': COMMENT}, ignore_index=True)
     
-    df_patient.to_excel(filepath_patient)
+#     df_patient.to_excel(filepath_patient)
     
-    # Remove sheet if already exist
-    sheet_name = 'PATIENT_STATUS' + '_' + date
-    workbook  = writer.book
-    sheetnames = workbook.sheetnames
-    if sheet_name in sheetnames:
-        sheet = workbook[sheet_name]
-        workbook.remove(sheet)
+#     # Remove sheet if already exist
+#     sheet_name = 'PATIENT_STATUS' + '_' + date
+#     workbook  = writer.book
+#     sheetnames = workbook.sheetnames
+#     if sheet_name in sheetnames:
+#         sheet = workbook[sheet_name]
+#         workbook.remove(sheet)
     
-    # Add patient ro master
-    writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
-    df_patient.to_excel(writer, sheet_name=sheet_name)
-    writer.save()
+#     # Add patient ro master
+#     writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
+#     df_patient.to_excel(writer, sheet_name=sheet_name)
+#     writer.save()
 
 
 def createStudy(settings):
     print('Create StudyInstanceID table.')
+    
+    conf=True
     
     CACS_NUM_MIN = 1
     CACS_IR_NUM_MIN = 0
@@ -1305,20 +1306,6 @@ def createStudy(settings):
     NCS_CTA_IR_NUM_MIN = 0
     NCS_CTA_FBP_NUM_MIN = 0
 
-    #date = folderpath_master.split('_')[-1]
-    #folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    #filepath_pred = os.path.join(folderpath_components, 'discharge_pred_' + date + '.xlsx')
-    #filepath_master_data = os.path.join(folderpath_components, 'discharge_master_data_' + date + '.xlsx')
-    #filepath_patient = os.path.join(folderpath_components, 'discharge_patient_' + date + '.xlsx')
-    #filepath_patient_conf = os.path.join(folderpath_components, 'discharge_patient_conf_' + date + '.xlsx')
-    #filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    # if master_process==False:
-    #     filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    # else:
-    #     filepath_master_tmp = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
-    #     folderpath, filename, file_extension = splitFilePath(filepath_master_tmp)
-    #     filepath_master = os.path.join(folderpath, filename + '_process' + file_extension)
-    
     filepath_patient = settings['filepath_patient']
     df_master = pd.read_excel(settings['filepath_master'], sheet_name='MASTER_'+ settings['date'], index_col=0)
     df_master.sort_index(inplace=True)
@@ -1353,7 +1340,7 @@ def createStudy(settings):
             
             studydate = df_patient['StudyDate']
             # Convert string to date and replace in df_patient
-            studydate = studydate.apply(lambda x: datetime.strptime(str(x), '%Y%m%d'))
+            studydate = studydate.apply(lambda x: datetime.datetime.strptime(str(x), '%Y%m%d'))
             df_patient['StudyDate'] = studydate
             
             if not pd.isnull(firstdate):
@@ -1509,11 +1496,11 @@ def createStudy(settings):
                            'ITT': ITT, 'STATUS': status, 'STATUS_MANUAL_CORRECTION': STATUS_MANUAL_CORRECTION, 'COMMENT': COMMENT}, ignore_index=True)
         
     df_PatientID.to_excel(filepath_patient)
-    df_PatientID_conf.to_excel(filepath_patient_conf)
+    df_PatientID_conf.to_excel(settings['filepath_patient_conf'])
 
-    writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
+    writer = pd.ExcelWriter(settings['filepath_master'], engine="openpyxl", mode="a")
     # Remove sheet if already exist
-    sheet_name = 'PATIENT_STATUS_' + date
+    sheet_name = 'PATIENT_STATUS_' + settings['date']
     workbook  = writer.book
     sheetnames = workbook.sheetnames
     if sheet_name in sheetnames:
@@ -1522,7 +1509,7 @@ def createStudy(settings):
     df_PatientID.to_excel(writer, sheet_name=sheet_name)
         
     if conf:
-        sheet_name = 'PATIENT_STATUS_CONF_' + date
+        sheet_name = 'PATIENT_STATUS_CONF_' + settings['date']
         if sheet_name in sheetnames:
             sheet = workbook[sheet_name]
             workbook.remove(sheet)
@@ -1681,8 +1668,86 @@ def checkMultiSlice():
     df_multi.to_excel(writer, sheet_name='FileSizeFailed')
     writer.save()
 
+def mergeManualSelection(settings):
+    """ Merge manual selected series
+        
+    :param settings: Dictionary of settings
+    :type settings: dict
+    """
+    
+    filepath_master = settings['filepath_master']
+    discharge_manual_selection = settings['folderpath_manual_selection']
+    df_master = pd.read_excel(filepath_master, sheet_name='MASTER_'+ settings['date'], index_col=0)
+    
+    # Extract manual files
+    centers = defaultdict(lambda:None, {})
+    filepath_manual = glob(discharge_manual_selection + '/*.xlsx')
+    for file in filepath_manual:
+        filesplit = file[0:-5].split("_")
+        for st in filesplit:
+            if st[0]=='P' and len(st)==3:
+                centers[st] = file
+    
+    # Update master for each center
+    for center in centers.keys():
+        print('Processing center', center)
+        filepath_manual = centers[center]
+        columns_copy=['ClassManualCorrection', 'Comment', 'Responsible Person']
+        df_manual = pd.read_excel(filepath_manual, index_col=0)
+        df_manual.replace(to_replace=[np.nan], value='', inplace=True)
+        df_manual_P = df_manual[df_manual['Site']==center]
+        df_manual_P = df_manual_P[columns_copy]
+        df_manual_P = df_manual_P[~(df_manual_P['ClassManualCorrection']=='UNDEFINED')]
+        df_manual_P['RFCLabel'] = df_manual_P['ClassManualCorrection']
+        df_master.update(df_manual_P)
+    
+    # Save master
+    writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
+    sheet_name = 'MASTER_'+ settings['date']
+    workbook  = writer.book
+    sheetnames = workbook.sheetnames
+    if sheet_name in sheetnames:
+        sheet = workbook[sheet_name]
+        workbook.remove(sheet)
+    df_master.to_excel(writer, sheet_name=sheet_name)
+    writer.save()
 
+def checkAutomaticManual(settings):
+
+    filepath_master = settings['filepath_master']
+    df_master = pd.read_excel(filepath_master, sheet_name='MASTER_'+ settings['date'], index_col=0)
+    df_master_copy = df_master.copy()
+    df_master_copy.replace(to_replace=[np.nan], value=0.0, inplace=True)
+    
+    
+    for index, row in df_master.iterrows():
+        print('index', index)
+        # Check multiple multi-slice-scans
+        if (df_master_copy.loc[index, 'NumberOfFrames'] > 1) and (df_master_copy.loc[index, 'Count']>1):
+            df_master.loc[index, 'ClassManualCorrection'] = 'PROBLEM'
+            df_master.loc[index, 'Comment'] = 'Multiple Multi-Slice-CTs under one SeriesInstanceUID.'
+            df_master.loc[index, 'Responsible Person'] = 'BF_AUT'
+        # Define other selection based on count smaller 15
+        if (df_master_copy.loc[index, 'NumberOfFrames'] == 0.0) and (df_master_copy.loc[index, 'Count']<15):
+            df_master.loc[index, 'ClassManualCorrection'] = 'OTHER'
+            df_master.loc[index, 'Comment'] = 'Selected as other becaus number of slices is smaller 15'
+            df_master.loc[index, 'Responsible Person'] = 'BF_AUT'
+            
+    # Save master
+    writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
+    sheet_name = 'MASTER_'+ settings['date']
+    workbook  = writer.book
+    sheetnames = workbook.sheetnames
+    if sheet_name in sheetnames:
+        sheet = workbook[sheet_name]
+        workbook.remove(sheet)
+    df_master.to_excel(writer, sheet_name=sheet_name)
+    writer.save()
+    
+    
 def createMaster():
+    """ Create master file
+    """
     
     # Load settings
     filepath_settings = 'H:/cloud/cloud_data/Projects/DISCHARGEMaster/data/settings.json'
@@ -1712,6 +1777,14 @@ def createMaster():
     # Init RF classifier
     initRFClassification(settings)
     classifieRFClassification(settings)
+    # Update manual selection
+    mergeManualSelection(settings)
+    #Classifie based on manual selection
+    classifieRFClassification(settings)
+    # Check manual selection
+    checkAutomaticManual(settings)
+    # Filter according to 10StepsGuide
+    filer10StepsGuide(settings)
     # Merge study sheet 
     createStudy(settings)
     # Format master

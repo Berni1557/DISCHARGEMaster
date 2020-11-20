@@ -20,8 +20,9 @@ def initSettings():
                              'ReconstructionDiameter','RequestedProcedureDescription','ContrastBolusStartTime','NominalPercentageOfCardiacPhase','CardiacRRIntervalSpecified',
                              'StudyDate']
     
-    settings['columns_first'] = ['Site', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 
-                                 'AcquisitionDate', 'SeriesNumber', 'Count', 'SeriesDescription']
+    settings['columns_first'] = ['Site', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'CLASS', 'RFCClass', 'RFCLabel', 
+                                 'RFCConfidence','ClassManualCorrection', 'Comment', 'Responsible Person', 
+                                 'Image Quality', 'Count', 'SeriesDescription', 'SeriesNumber', 'AcquisitionDate']
     
     settings['recoClasses'] = ['FBP', 'IR', 'UNDEFINED']
     settings['columns_tracking'] = ['ProblemID', 'Site', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'Problem Summary',
@@ -41,10 +42,8 @@ def loadSettings(seetingsfile='seetings.json'):
 def fillSettingsTags(settings):
     
     settings['folderpath_master_date'] = os.path.join(settings['folderpath_master'], 'discharge_master_' + settings['date'])
-    #settings['folderpath_tables'] = os.path.join(settings['folderpath_master_date'], 'discharge_tables_' + settings['date'])
     settings['folderpath_sources'] = os.path.join(settings['folderpath_master_date'], 'discharge_sources_' + settings['date'])
     settings['folderpath_components'] = os.path.join(settings['folderpath_master_date'], 'discharge_components_' + settings['date'])
-    
     settings['filepath_dicom'] = os.path.join(settings['folderpath_sources'], 'discharge_dicom_' + settings['date'] + '.xlsx')
     settings['filepath_ITT'] = os.path.join(settings['folderpath_sources'], 'discharge_ITT_' + settings['date'] + '.xlsx')
     settings['filepath_ecrf'] = os.path.join(settings['folderpath_sources'], 'discharge_ecrf_' + settings['date'] + '.xlsx')
@@ -58,12 +57,12 @@ def fillSettingsTags(settings):
     settings['filepath_manual'] = os.path.join(settings['folderpath_components'], 'discharge_manual_' + settings['date'] + '.xlsx')
     settings['filepath_prediction'] = os.path.join(settings['folderpath_components'], 'discharge_prediction_' + settings['date'] + '.xlsx')
     settings['filepath_master'] = os.path.join(settings['folderpath_master_date'], 'discharge_master_' + settings['date'] + '.xlsx')
-    settings['filepath_hist'] = os.path.join(settings['folderpath_components'], 'discharge_hist_' + settings['date'] + '.xlsx')
+    settings['filepath_hist'] = os.path.join(settings['folderpath_sources'], 'discharge_hist_' + settings['date'] + '.pkl')
     settings['filepath_patient'] = os.path.join(settings['folderpath_components'], 'discharge_patient_' + settings['date'] + '.xlsx')
+    settings['folderpath_manual_selection'] = os.path.join(settings['folderpath_master_date'], 'discharge_manual_selection')
+    settings['filepath_patient_conf'] = os.path.join(settings['folderpath_components'], 'discharge_patient_conf_' + settings['date'] + '.xlsx')
     
-
     os.makedirs(settings['folderpath_master_date'], exist_ok=True)
-    #os.makedirs(settings['folderpath_tables'], exist_ok=True)
     os.makedirs(settings['folderpath_sources'], exist_ok=True)
     os.makedirs(settings['folderpath_components'], exist_ok=True)
     

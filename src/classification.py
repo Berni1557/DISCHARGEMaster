@@ -25,7 +25,7 @@ def createRFClassification(settings):
     df_rfc = pd.concat([df_rfc0, df_rfc1, df_rfc2], axis=1)
     df_rfc.to_excel(settings['filepath_rfc'])
 
-def initRFClassification(folderpath_master, master_process=False):
+def initRFClassification(settings):
 
     filepath_master = settings['filepath_master']
     sheet_name = 'MASTER_' + settings['date']
@@ -41,7 +41,7 @@ def initRFClassification(folderpath_master, master_process=False):
         #learner.extractFeatures(df_master, discharge_filter)
         
         #filepath_hist = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_01042020/discharge_master_01042020_hist.pkl'
-        dfHist = pd.read_pickle(filepath_hist)
+        dfHist = pd.read_pickle(settings['filepath_hist'])
         dfData = pd.concat([dfHist.iloc[:,3:], dfHist.iloc[:,1]],axis=1)
         X = np.array(dfData)
         scanClassesRF = defaultdict(lambda:-1,{'CACS': 0, 'CTA': 1, 'NCS_CACS': 2, 'NCS_CTA': 3, 'OTHER': 4})
@@ -101,7 +101,7 @@ def classifieRFClassification(settings):
         discharge_filter = target['FILTER']
 
         #filepath_hist = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_01042020/discharge_master_01042020_hist.pkl'
-        dfHist = pd.read_pickle(filepath_hist)
+        dfHist = pd.read_pickle(settings['filepath_hist'])
         
         df0 = df_master[['SeriesInstanceUID','RFCLabel']]
         df_merge = df0.merge(dfHist, on=['SeriesInstanceUID', 'SeriesInstanceUID'])
