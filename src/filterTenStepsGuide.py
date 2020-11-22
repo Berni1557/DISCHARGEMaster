@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from discharge_ncs import discharge_ncs
 from computeCTA import computeCTA
+from reco.reco_filter import RecoFilter
 
 def isNaN(num):
     return num != num
@@ -188,3 +189,29 @@ def filter_CACS_10StepsGuide(df_data):
         result = criteria1 and criteria2 and criteria3 and criteria4 and criteria5
         df_CACS = df_CACS.append({'CACS10StepsGuide': result}, ignore_index=True)
     return df_CACS
+
+def filterReconstructionRF(settings):
+    # date = folderpath_master.split('_')[-1]
+    # folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
+    # filepath_master = os.path.join(folderpath_master, 'discharge_master_' + date + '.xlsx')
+    # filepath_fourier = os.path.join(folderpath_components, 'discharge_master_' + date + '_fourier.pkl')
+    # filepath_reco = os.path.join(folderpath_components, 'discharge_reco_' + date + '.xlsx')
+    # sheet_name ='MASTER_' + date
+    # df_master = pd.read_excel(filepath_master, sheet_name=sheet_name)
+    #df_master=df_master[0:10]
+    #df_reco = predictReco(folderpath_discharge, filepath_fourier, df_master)
+    reco = RecoFilter()
+    self=reco
+    df_master = reco.predictReco(settings)
+    
+    df_reco = pd.DataFrame()
+    df_reco['RFRECO'] = df_master['RFRECO']
+    df_reco.to_excel(filepath_reco)
+    
+    # Write results to master
+    writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
+    workbook  = writer.book
+    sheet = workbook[sheet_name]
+    workbook.remove(sheet)
+    df_master.to_excel(writer, sheet_name=sheet_name)
+    writer.save()

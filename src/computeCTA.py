@@ -70,11 +70,10 @@ def computeCTA(settings):
     #filepath_master = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_01042020/discharge_master_01042020.xlsx'
     
     df_discharge = pd.read_excel(filepath_dicom)
-    df_master = pd.read_excel(filepath_master)
+    df_master = pd.read_pickle(filepath_master)
     df_ITT = pd.read_excel(filepath_ITT)
     df_phase_exclude_stenosis = pd.read_excel(filepath_phase_exclude_stenosis)
     df_stenosis_bigger_20_phase = pd.read_excel(filepath_stenosis_bigger_20_phases)
-    df_ITT = pd.read_excel(filepath_ITT)
     df_prct = pd.read_excel(filepath_prct)
     df_ecrf = pd.read_excel(filepath_ecrf)
     

@@ -15,10 +15,12 @@ def initSettings():
                               'ConvolutionKernel', 'ReconstructionDiameter', 'RequestedProcedureDescription',
                               'ContrastBolusStartTime', 'NominalPercentageOfCardiacPhase', 'CardiacRRIntervalSpecified', 'StudyDate']
     
-    settings['dicom_tag_order'] = ['Site','PatientID','StudyInstanceUID','SeriesInstanceUID','AcquisitionDate','SeriesNumber', 'Count', 'NumberOfFrames', 'SeriesDescription',
+    settings['dicom_tags_order'] = ['Site','PatientID','StudyInstanceUID','SeriesInstanceUID','AcquisitionDate','SeriesNumber', 'Count', 'NumberOfFrames', 'SeriesDescription',
                              'Modality','Rows', 'InstanceNumber','ProtocolName','ContrastBolusAgent','ImageComments','PixelSpacing','SliceThickness','ConvolutionKernel',
                              'ReconstructionDiameter','RequestedProcedureDescription','ContrastBolusStartTime','NominalPercentageOfCardiacPhase','CardiacRRIntervalSpecified',
                              'StudyDate']
+    settings['dicom_tags_first'] = ['Site', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 
+                                   'AcquisitionDate', 'SeriesNumber', 'Count', 'SeriesDescription']
     
     settings['columns_first'] = ['Site', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'CLASS', 'RFCClass', 'RFCLabel', 
                                  'RFCConfidence','ClassManualCorrection', 'Comment', 'Responsible Person', 
@@ -30,6 +32,8 @@ def initSettings():
                                     'Results', 'Answer from the site', 'Status', 'Responsible Person']
     return settings
 
+
+    
 def saveSettings(settings, seetingsfile='seetings.json'):
     with open(seetingsfile, 'w') as f:
         json.dump(settings, f)
@@ -52,14 +56,14 @@ def fillSettingsTags(settings):
     settings['filepath_stenosis_bigger_20_phases'] = os.path.join(settings['folderpath_sources'], 'discharge_stenosis_bigger_20_phases_' + settings['date'] + '.xlsx')
     settings['filepath_tracking'] = os.path.join(settings['folderpath_sources'], 'discharge_tracking_' + settings['date'] + '.xlsx')
     settings['filepath_master_track'] = os.path.join(settings['folderpath_components'], 'discharge_master_track_' + settings['date'] + '.xlsx')
-    settings['filepath_data'] = os.path.join(settings['folderpath_components'], 'discharge_data_' + settings['date'] + '.xlsx')
-    settings['filepath_rfc'] = os.path.join(settings['folderpath_components'], 'discharge_rcf_' + settings['date'] + '.xlsx')
-    settings['filepath_manual'] = os.path.join(settings['folderpath_components'], 'discharge_manual_' + settings['date'] + '.xlsx')
-    settings['filepath_prediction'] = os.path.join(settings['folderpath_components'], 'discharge_prediction_' + settings['date'] + '.xlsx')
+    settings['filepath_data'] = os.path.join(settings['folderpath_components'], 'discharge_data_' + settings['date'] + '.pkl')
+    settings['filepath_rfc'] = os.path.join(settings['folderpath_components'], 'discharge_rcf_' + settings['date'] + '.pkl')
+    settings['filepath_manual'] = os.path.join(settings['folderpath_components'], 'discharge_manual_' + settings['date'] + '.pkl')
+    settings['filepath_prediction'] = os.path.join(settings['folderpath_components'], 'discharge_prediction_' + settings['date'] + '.pkl')
     settings['filepath_master'] = os.path.join(settings['folderpath_master_date'], 'discharge_master_' + settings['date'] + '.xlsx')
     settings['filepath_hist'] = os.path.join(settings['folderpath_sources'], 'discharge_hist_' + settings['date'] + '.pkl')
-    settings['filepath_patient'] = os.path.join(settings['folderpath_components'], 'discharge_patient_' + settings['date'] + '.xlsx')
-    settings['folderpath_manual_selection'] = os.path.join(settings['folderpath_master_date'], 'discharge_manual_selection')
+    settings['filepath_patient'] = os.path.join(settings['folderpath_components'], 'discharge_patient_' + settings['date'] + '.pkl')
+    settings['folderpath_manual_selection'] = os.path.join(settings['folderpath_master_date'], 'discharge_manual_selection_' + settings['date'])
     settings['filepath_patient_conf'] = os.path.join(settings['folderpath_components'], 'discharge_patient_conf_' + settings['date'] + '.xlsx')
     
     os.makedirs(settings['folderpath_master_date'], exist_ok=True)

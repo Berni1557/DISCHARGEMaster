@@ -4,156 +4,186 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict
 from ActiveLearner import DISCHARGEFilter, ActiveLearner
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score
 
 def createRFClassification(settings):
     print('Create RF Classification')
-    # date = folderpath_master.split('_')[-1]
-    # folderpath_components = os.path.join(folderpath_master, 'discharge_components_' + date)
-    # if not os.path.isdir(folderpath_components):
-    #     os.mkdir(folderpath_components)
-
-    #filepath_data = os.path.join(settings['folderpath_components'], 'discharge_data_' + date + '.xlsx')
-    #filepath_rfc = os.path.join(folderpath_components, 'discharge_rfc_' + date + '.xlsx')
-    df_data = pd.read_excel(settings['filepath_data'])
-    # Repace Count for multi-slice format
-    #idx=df_data['NumberOfFrames']>0
-    #df_data['Count'][idx] = df_data['NumberOfFrames'][idx]
-    
+    #df_data = pd.read_excel(settings['filepath_data'])
+    df_data = pd.read_pickle(settings['filepath_data'])
     df_rfc0 = pd.DataFrame('UNDEFINED', index=np.arange(len(df_data)), columns=['RFCLabel'])
     df_rfc1 = pd.DataFrame('UNDEFINED', index=np.arange(len(df_data)), columns=['RFCClass'])
     df_rfc2 = pd.DataFrame(0, index=np.arange(len(df_data)), columns=['RFCConfidence'])
     df_rfc = pd.concat([df_rfc0, df_rfc1, df_rfc2], axis=1)
-    df_rfc.to_excel(settings['filepath_rfc'])
+    #df_rfc.to_excel(settings['filepath_rfc'])
+    df_rfc.to_pickle(settings['filepath_rfc'])
 
 def initRFClassification(settings):
+    """ Init RF classifier
+        
+    :param settings: Dictionary of settings
+    :type settings: dict
+    """ 
 
     filepath_master = settings['filepath_master']
+    
     sheet_name = 'MASTER_' + settings['date']
-    if os.path.exists(filepath_master):
-        df_master = pd.read_excel(filepath_master, sheet_name=sheet_name, index_col=0)
-        
-        # Create active learner
-        learner = ActiveLearner()
-        target = featureSelection(filtername='CACSFilter_V02')
-        discharge_filter = target['FILTER']
-        
-        # Extract features
-        #learner.extractFeatures(df_master, discharge_filter)
-        
-        #filepath_hist = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_01042020/discharge_master_01042020_hist.pkl'
-        dfHist = pd.read_pickle(settings['filepath_hist'])
-        dfData = pd.concat([dfHist.iloc[:,3:], dfHist.iloc[:,1]],axis=1)
-        X = np.array(dfData)
-        scanClassesRF = defaultdict(lambda:-1,{'CACS': 0, 'CTA': 1, 'NCS_CACS': 2, 'NCS_CTA': 3, 'OTHER': 4})
-        #scanClassesRFInv = defaultdict(lambda:'',{'CACS': 1, 'CTA': 2, 'NCS_CACS': 3, 'NCS_CTA': 4})
-        scanClassesRFInv = defaultdict(lambda:'UNDEFINED' ,{0: 'CACS', 1: 'CTA', 2: 'NCS_CACS', 3: 'NCS_CTA', 4: 'OTHER'})
-        
-        #Y = [scanClassesRF[x] for x in list(dfHist['CLASS'])]
-        Y = [scanClassesRF[x] for x in list(df_master['CLASS'])]
-        Y = np.array(Y)
-        X = np.where(X=='', -1, X)
-        
-        Target = 'RFCLabel'
-        df_class = df_master.copy()
-        Y = Y[0:len(df_class[Target])]
-        X = X[0:len(df_class[Target])]
+    df_master = pd.read_excel(filepath_master, sheet_name=sheet_name, index_col=0)
+    df_master['RFCConfidence'] = 0.00001
+    df_master['RFCClass'] = 'UNDEFINED'
+    df_master['RFCLabel'] = 'UNDEFINED'
 
-        learner.df_features = X
+    # Write results to master
+    writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
+    workbook  = writer.book
+    sheet = workbook[sheet_name]
+    workbook.remove(sheet)
+    df_master.to_excel(writer, sheet_name=sheet_name)
 
-        # Update data
-        if sum(Y>0)>0:
-            #Yarray = np.array(Y)
-            #Yarray[Yarray==0] = -1
-            
-            df_class[Target] = Y
-            
-            # Predict random forest
-            confidence, C, ACC, pred_class, df_features = learner.confidencePredictor(df_class, discharge_filter, Target = Target)
-            print('Confusion matrix:', C)
-            pred_class = [scanClassesRFInv[x] for x in list(pred_class)]
-            df_master['RFCConfidence'] = confidence
-            df_master['RFCClass'] = pred_class
-            df_master['RFCLabel'] = [scanClassesRFInv[x] for x in list(Y)]
-            
-            # Write results to master
-            writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
-            workbook  = writer.book
-            sheet = workbook[sheet_name]
-            workbook.remove(sheet)
-            df_master.to_excel(writer, sheet_name=sheet_name)
-            writer.save()
-        else:
-            print('data are not labled')
-    else:
-        print('Master', filepath_master, 'not found')      
-        
-def classifieRFClassification(settings):
     
 
+    # filepath_master = settings['filepath_master']
+    # sheet_name = 'MASTER_' + settings['date']
+    # if os.path.exists(filepath_master):
+    #     df_master = pd.read_excel(filepath_master, sheet_name=sheet_name, index_col=0)
+        
+    #     # Create active learner
+    #     learner = ActiveLearner()
+    #     target = featureSelection(filtername='CACSFilter_V02')
+    #     discharge_filter = target['FILTER']
+        
+    #     # Extract features
+    #     #learner.extractFeatures(df_master, discharge_filter)
+        
+    #     #filepath_hist = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_01042020/discharge_master_01042020_hist.pkl'
+    #     dfHist = pd.read_pickle(settings['filepath_hist'])
+    #     dfData = pd.concat([dfHist.iloc[:,3:], dfHist.iloc[:,1]],axis=1)
+    #     X = np.array(dfData)
+    #     scanClassesRF = defaultdict(lambda:-1,{'CACS': 0, 'CTA': 1, 'NCS_CACS': 2, 'NCS_CTA': 3, 'OTHER': 4})
+    #     #scanClassesRFInv = defaultdict(lambda:'',{'CACS': 1, 'CTA': 2, 'NCS_CACS': 3, 'NCS_CTA': 4})
+    #     scanClassesRFInv = defaultdict(lambda:'UNDEFINED' ,{0: 'CACS', 1: 'CTA', 2: 'NCS_CACS', 3: 'NCS_CTA', 4: 'OTHER'})
+        
+    #     #Y = [scanClassesRF[x] for x in list(dfHist['CLASS'])]
+    #     Y = [scanClassesRF[x] for x in list(df_master['CLASS'])]
+    #     Y = np.array(Y)
+    #     X = np.where(X=='', -1, X)
+        
+    #     Target = 'RFCLabel'
+    #     df_class = df_master.copy()
+    #     Y = Y[0:len(df_class[Target])]
+    #     X = X[0:len(df_class[Target])]
+
+    #     learner.df_features = X
+
+    #     # Update data
+    #     if sum(Y>0)>0:
+    #         #Yarray = np.array(Y)
+    #         #Yarray[Yarray==0] = -1
+            
+    #         df_class[Target] = Y
+            
+    #         # Predict random forest
+    #         confidence, C, ACC, pred_class, df_features = learner.confidencePredictor(df_class, discharge_filter, Target = Target)
+    #         print('Confusion matrix:', C)
+    #         pred_class = [scanClassesRFInv[x] for x in list(pred_class)]
+    #         df_master['RFCConfidence'] = confidence
+    #         df_master['RFCClass'] = pred_class
+    #         df_master['RFCLabel'] = [scanClassesRFInv[x] for x in list(Y)]
+            
+    #         # Write results to master
+    #         writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
+    #         workbook  = writer.book
+    #         sheet = workbook[sheet_name]
+    #         workbook.remove(sheet)
+    #         df_master.to_excel(writer, sheet_name=sheet_name)
+    #         writer.save()
+    #     else:
+    #         print('data are not labled')
+    # else:
+    #     print('Master', filepath_master, 'not found')      
+     
+    
+def classifieRFClassification(settings):
+    
     filepath_master = settings['filepath_master']
     sheet_name = 'MASTER_' + settings['date']
+    scanClassesRF = defaultdict(lambda:-1,{'CACS': 0, 'CTA': 1, 'NCS_CACS': 2, 'NCS_CTA': 3, 'OTHER': 4})
+    scanClassesRFInv = defaultdict(lambda:'UNDEFINED' ,{0: 'CACS', 1: 'CTA', 2: 'NCS_CACS', 3: 'NCS_CTA', 4: 'OTHER'})
+        
     if os.path.exists(filepath_master):
         df_master = pd.read_excel(filepath_master, sheet_name=sheet_name, index_col=0)
         
-        # Create active learner
-        learner = ActiveLearner()
-        target = featureSelection(filtername='CACSFilter_V02')
-        discharge_filter = target['FILTER']
-
-        #filepath_hist = 'H:/cloud/cloud_data/Projects/CACSFilter/data/discharge_master/discharge_master_01042020/discharge_master_01042020_hist.pkl'
+        # Read histrogram
         dfHist = pd.read_pickle(settings['filepath_hist'])
         
+        # Merge dataframes of hist and master
+        df0 = df_master[['SeriesInstanceUID','RFCLabel']]
+        df_merge = df0.merge(dfHist, on=['SeriesInstanceUID', 'SeriesInstanceUID'])
+        df_data = df_merge.iloc[:,4:104]
+        X = np.array(df_data)
         df0 = df_master[['SeriesInstanceUID','RFCLabel']]
         df_merge = df0.merge(dfHist, on=['SeriesInstanceUID', 'SeriesInstanceUID'])
         
-        #dfHist = dfHist[idx_ct]
-        #dfData = pd.concat([dfHist.iloc[:,3:], dfHist.iloc[:,1]],axis=1)
-        #dfData = pd.concat([df_merge.iloc[:,4:104], df_merge.iloc[:,2]],axis=1)
-        dfData = pd.concat([df_merge.iloc[:,4:104]],axis=1)
-        X = np.array(dfData)
-        scanClassesRF = defaultdict(lambda:-1,{'CACS': 0, 'CTA': 1, 'NCS_CACS': 2, 'NCS_CTA': 3, 'OTHER': 4})
-        #scanClassesRFInv = defaultdict(lambda:'',{'CACS': 1, 'CTA': 2, 'NCS_CACS': 3, 'NCS_CTA': 4})
-        scanClassesRFInv = defaultdict(lambda:'UNDEFINED' ,{0: 'CACS', 1: 'CTA', 2: 'NCS_CACS', 3: 'NCS_CTA', 4: 'OTHER'})
-
-        idx_manual = ~(df_master['ClassManualCorrection']=='UNDEFINED')
-        RFCLabel = df_master['RFCLabel']
-        RFCLabel[idx_manual] = df_master['ClassManualCorrection'][idx_manual]
-    
-        Y = [scanClassesRF[x] for x in list(df_merge['RFCLabel'])]
-        Y = np.array(Y)
-        X = np.where(X=='', -1, X)
+        # extract data and label
+        Y = np.array([scanClassesRF[x] for x in list(df_merge['RFCLabel'])])
+        X = np.nan_to_num(X, nan=-1)
         
-        Target = 'RFCLabel'
-
-        learner.df_features = X
-
-        if sum(Y>0)>0:
-
-            df_merge[Target] = Y
-            
-            # Predict random forest
-            confidence, C, ACC, pred_class, df_features = learner.confidencePredictor(df_merge, discharge_filter, Target = Target)
-            print('Confusion matrix:', C)
-            pred_class = [scanClassesRFInv[x] for x in list(pred_class)]
-            
-            print('df_mastershape', df_master.shape)
-            print('dfDatashape', dfData.shape)
-            
-            df_master['RFCConfidence'] = confidence
-            df_master['RFCClass'] = pred_class
-            
-            # Write results to master
-            writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
-            workbook  = writer.book
-            sheet = workbook[sheet_name]
-            workbook.remove(sheet)
-            df_master.to_excel(writer, sheet_name=sheet_name)
-            writer.save()
-        else:
-            print('data are not labled')
-    else:
-        print('Master', filepath_master, 'not found')
+        # Filter undefined label 
+        idx=Y>-1
+        X_all=X[idx]
+        Y_all=Y[idx]
         
+        idx_all = np.array([i for i in range(0,X_all.shape[0])])
+        np.random.shuffle(idx_all)
+        split = int(np.round(0.7*len(idx_all)))
+        idx_train = idx_all[0:split]
+        idx_valid = idx_all[split:]
+        
+        X_train = X_all[idx_train]
+        Y_train = Y_all[idx_train]
+        
+        X_valid = X_all[idx_valid]
+        Y_valid = Y_all[idx_valid]
+        # Train random forest
+        clfRF = RandomForestClassifier(max_depth=20, n_estimators=300)
+        clfRF.fit(X_train, Y_train)
+        
+        # Extract confusion matrix and accuracy
+        pred_valid = clfRF.predict(X_valid)
+        C_valid = confusion_matrix(pred_valid, Y_valid)
+        ACC_valid = accuracy_score(pred_valid, Y_valid)
+        
+        print('C_valid', C_valid)
+        print('ACC_valid', ACC_valid)
+        
+        pred = clfRF.predict(X_all)
+        C = confusion_matrix(pred, Y_all)
+        ACC = accuracy_score(pred, Y_all)
+        
+        # print classification results
+        print('C', C)
+        print('ACC', ACC)
+            
+        # Predict confidence
+        prop = clfRF.predict_proba(X_train)
+        pred_class = clfRF.predict(X_train)
+        random_guess = 1/(Y_train.max()+1) # random_guess is probability by random guess (1/Number od classes)
+        confidence = (np.max(prop, axis=1)-random_guess)*(1/(1-random_guess))
+        
+        pred_class = [scanClassesRFInv[x] for x in list(pred_class)]
+        df_master['RFCConfidence'] = df_master['RFCConfidence'].astype(float)
+        df_master['RFCConfidence'][idx] = confidence
+        df_master['RFCClass'][idx] = pred_class
+        
+        #Write results to master
+        writer = pd.ExcelWriter(filepath_master, engine="openpyxl", mode="a")
+        workbook  = writer.book
+        sheet = workbook[sheet_name]
+        workbook.remove(sheet)
+        df_master.to_excel(writer, sheet_name=sheet_name)
+        writer.save()
+
         
 def featureSelection(filtername='CACSFilter_V02', filt='CLASS_CACS_alt0'):
     if filtername=='CACSFilter_V02':
