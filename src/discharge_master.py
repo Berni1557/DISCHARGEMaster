@@ -1192,6 +1192,9 @@ def mergeManualSelection(settings):
         df_master['RFCLabel'][idx_master] = df_merge['RFCClass_y'][idx_master]
         df_master['Image Quality'][idx_master] = df_merge['Image Quality'][idx_master]
         df_master['Responsible Person'][idx_master] = df_merge['Responsible Person_y'][idx_master]
+        df_master['Comment'][idx_master] = df_merge['Comment_y'][idx_master]
+        df_master['ClassManualCorrection'][idx_master] = df_merge['ClassManualCorrection_y'][idx_master]
+
 
 
     idx = ~(df_master['ClassManualCorrection']=='UNDEFINED')

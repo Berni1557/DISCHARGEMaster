@@ -166,8 +166,8 @@ def classifieRFClassification(settings):
         print('ACC', ACC)
             
         # Predict confidence
-        prop = clfRF.predict_proba(X_train)
-        pred_class = clfRF.predict(X_train)
+        prop = clfRF.predict_proba(X_all)
+        pred_class = clfRF.predict(X_all)
         random_guess = 1/(Y_train.max()+1) # random_guess is probability by random guess (1/Number od classes)
         confidence = (np.max(prop, axis=1)-random_guess)*(1/(1-random_guess))
         
