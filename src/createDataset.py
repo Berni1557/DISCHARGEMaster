@@ -33,7 +33,7 @@ def createCACS(settings, name, folderpath, createPreview, createDatasetFromPrevi
     os.makedirs(folderpath_data, exist_ok=True)
     folderpath_preview = os.path.join(folderpath_data, 'preview')
     os.makedirs(folderpath_preview, exist_ok=True)
-    folderpath_dataset = os.path.join(folderpath_data, 'dataset')
+    folderpath_dataset = os.path.join(folderpath_data, 'Images')
     os.makedirs(folderpath_dataset, exist_ok=True)   
     filepath_preview = os.path.join(folderpath_preview, 'preview.xlsx')
     filepath_dataset = os.path.join(folderpath_dataset, name +'.xlsx')
@@ -63,7 +63,7 @@ def createCACS(settings, name, folderpath, createPreview, createDatasetFromPrevi
         filepath_preview_mhd = os.path.join(folderpath_preview, 'preview.mhd')
         image_preview = np.zeros((len(df_preview),512,512), np.int16)
         
-        for index, row in df_preview.iterrows(): 
+        for index, row in df_preview[0:10].iterrows(): 
             try:
                 if index % 100==0:
                     print('Index:', index)
@@ -88,7 +88,7 @@ def createCACS(settings, name, folderpath, createPreview, createDatasetFromPrevi
         df_preview = pd.read_excel(filepath_preview)
         df_cacs = df_preview[df_preview['ManualCorrection']==1]
         df_cacs.to_excel(filepath_dataset)
-        for index, row in df_preview.iterrows():
+        for index, row in df_preview[0:10].iterrows():
             if index % 100==0:
                 print('Index:', index)
             patient=CTPatient(row['StudyInstanceUID'], row['PatientID'])
