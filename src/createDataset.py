@@ -26,7 +26,7 @@ from filterTenStepsGuide import filter_CACS_10StepsGuide, filter_CACS, filter_NC
 from CTDataStruct import CTPatient, CTImage
 import SimpleITK as sitk
 
-def createCACS(settings, name, folderpath, createPreview, createDatasetFromPreview):
+def createCACS(settings, name, folderpath, createPreview, createDatasetFromPreview, NumSamples=None):
     
     # Create dataset folder
     folderpath_data = os.path.join(folderpath, name)
@@ -37,23 +37,33 @@ def createCACS(settings, name, folderpath, createPreview, createDatasetFromPrevi
     os.makedirs(folderpath_dataset, exist_ok=True)   
     filepath_preview = os.path.join(folderpath_preview, 'preview.xlsx')
     filepath_dataset = os.path.join(folderpath_dataset, name +'.xlsx')
+    cols = ['ID_CACS', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'SeriesNumber', 'Count', 'NumberOfFrames',
+            'KHK', 'RECO', 'SliceThickness', 'ReconstructionDiameter', 'ConvolutionKernel', 'CACSSelection', 
+            'StudyDate', 'ITT', 'Comment', 'KVP']
+    cols_master = ['PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'SeriesNumber', 'Count', 'NumberOfFrames',
+            'RECO', 'SliceThickness', 'ReconstructionDiameter', 'ConvolutionKernel', 'StudyDate', 'ITT', 'Comment']
+    cols_first = ['ID_CACS','CACSSelection', 'PatientID', 'SeriesNumber', 'StudyInstanceUID', 'SeriesInstanceUID']
     
     if createPreview:
         
         # Read master
         df_master = pd.read_excel(settings['filepath_master'], sheet_name='MASTER_01092020')
-    
-        # Filter by CACS dataset criterias
-        c0 = df_master['RFCLabel']=='CACS'
-        c1 = df_master['SliceThickness']==3.0
-        df_cacs = df_master[c0 & c1]
+        df_preview = pd.DataFrame(columns=cols)
+        df_preview[cols_master] = df_master[cols_master]
+        df_preview['KHK'] = 'UNDEFINED'
+        df_preview['KVP'] = 'UNDEFINED'
+        df_preview['CACSSelection'] = (df_master['RFCLabel']=='CACS')*1
         
         # Create preview excel
-        df_preview = df_cacs.copy()
-        df_preview['ManualCorrection'] = 1
         df_preview.reset_index(drop=True, inplace=True)
-        cols = df_master.columns.tolist()
-        cols_first = ['ManualCorrection', 'PatientID', 'SeriesNumber', 'StudyInstanceUID', 'SeriesInstanceUID']
+        constrain = list(df_master['RFCLabel']=='CACS')
+        k=0
+        ID_CACS = [-1 for i in range(len(constrain))]
+        for i in range(len(constrain)):
+            if constrain[i]==True:
+                ID_CACS[i]="{:04n}".format(k)
+                k = k + 1
+        df_preview['ID_CACS'] = ID_CACS
         cols_new = cols_first + [x for x in cols if x not in cols_first]
         df_preview = df_preview[cols_new]
         df_preview.reset_index(inplace=True, drop=True)
@@ -61,23 +71,29 @@ def createCACS(settings, name, folderpath, createPreview, createDatasetFromPrevi
         
         # Create preview mhd
         filepath_preview_mhd = os.path.join(folderpath_preview, 'preview.mhd')
-        image_preview = np.zeros((len(df_preview),512,512), np.int16)
+        k_max = k-1
+        image_preview = np.zeros((k_max,512,512), np.int16)
         
-        for index, row in df_preview[0:10].iterrows(): 
-            try:
-                if index % 100==0:
+        if NumSamples is None:
+            NumSamples = len(df_preview)
+        
+        for index, row in df_preview[0:NumSamples].iterrows():
+            if int(row['ID_CACS'])>-1:
+                try:
+                    if index % 100==0:
+                        print('Index:', index)
                     print('Index:', index)
-                patient=CTPatient(row['StudyInstanceUID'], row['PatientID'])
-                series = patient.loadSeries(settings['folderpath_discharge'], row['SeriesInstanceUID'], None)
-                image = series.image.image()
-                if image.shape[1]==512:
-                    SliceNum = int(np.round(image.shape[0]*0.7))
-                    image_preview[index,:,:] = image[SliceNum,:,:]
-                else:
-                    print('Image size is not 512x512')
-                    print('SeriesInstanceUID', row['SeriesInstanceUID'])
-            except:
-                print('Coud not open image:', row['SeriesInstanceUID'])
+                    patient = CTPatient(row['StudyInstanceUID'], row['PatientID'])
+                    series = patient.loadSeries(settings['folderpath_discharge'], row['SeriesInstanceUID'], None)
+                    image = series.image.image()
+                    if image.shape[1]==512:
+                        SliceNum = int(np.round(image.shape[0]*0.7))
+                        image_preview[int(row['ID_CACS']),:,:] = image[SliceNum,:,:]
+                    else:
+                        print('Image size is not 512x512')
+                        print('SeriesInstanceUID', row['SeriesInstanceUID'])
+                except:
+                    print('Coud not open image:', row['SeriesInstanceUID'])
     
         image_preview_mhd = CTImage()
         image_preview_mhd.setImage(image_preview)
@@ -110,11 +126,11 @@ def createDataset():
     settings = fillSettingsTags(loadSettings(filepath_settings))
     
     # Create CACS preview
-    name = 'CACS_20200512'
+    name = 'CACS_20210801'
     folderpath = 'H:/cloud/cloud_data/Projects/DISCHARGEMaster/datasets'
     createPreview = True
     createDatasetFromPreview = False
-    createCACS(settings, name, folderpath, createPreview, createDatasetFromPreview)
+    createCACS(settings, name, folderpath, createPreview, createDatasetFromPreview, NumSamples=None)
     
     
     

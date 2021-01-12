@@ -13,7 +13,8 @@ def initSettings():
                               'Rows', 'Columns', 'InstanceNumber', 'PatientSex', 'PatientAge', 'ProtocolName',
                               'ContrastBolusAgent', 'ImageComments', 'PixelSpacing', 'SliceThickness', 'FilterType',
                               'ConvolutionKernel', 'ReconstructionDiameter', 'RequestedProcedureDescription',
-                              'ContrastBolusStartTime', 'NominalPercentageOfCardiacPhase', 'CardiacRRIntervalSpecified', 'StudyDate']
+                              'ContrastBolusStartTime', 'NominalPercentageOfCardiacPhase', 'CardiacRRIntervalSpecified', 'StudyDate',
+                              'SliceSpacing']
     
     settings['dicom_tags_order'] = ['Site','PatientID','StudyInstanceUID','SeriesInstanceUID','AcquisitionDate','SeriesNumber', 'Count', 'NumberOfFrames', 'SeriesDescription',
                              'Modality','Rows', 'InstanceNumber','ProtocolName','ContrastBolusAgent','ImageComments','PixelSpacing','SliceThickness','ConvolutionKernel',

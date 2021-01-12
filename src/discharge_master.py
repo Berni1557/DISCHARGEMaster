@@ -28,6 +28,7 @@ from openpyxl.formatting import Rule
 from settings import initSettings, saveSettings, loadSettings, fillSettingsTags
 from classification import createRFClassification, initRFClassification, classifieRFClassification
 from filterTenStepsGuide import filter_CACS_10StepsGuide, filter_CACS, filter_NCS, filterReconstruction, filter_CTA, filer10StepsGuide, filterReconstructionRF
+from discharge_extract import extractDICOMTags
 
 patient_status = ['OK', 'EXCLUDED', 'MISSING_CACS', 'MISSING_CTA', 'MISSING_NC_CACS', 'MISSING_NC_CTA']
 patient_status_manual = ['OK', 'EXCLUDED', 'UNDEFINED', 'INPROGRESS']
@@ -1175,7 +1176,8 @@ def mergeManualSelection(settings):
         print('Processing center', center)
         filepath_manual = centers[center]
         columns_copy=['SeriesInstanceUID', 'ClassManualCorrection', 'Comment', 'Responsible Person', 'RFCLabel', 'RFCClass']
-        df_manual = pd.read_excel(filepath_manual, sheet_name='MASTER_01042020', index_col=0)
+        sheet_name = 'MASTER_'+ settings['date']
+        df_manual = pd.read_excel(filepath_manual, sheet_name=sheet_name, index_col=0)
         df_manual.replace(to_replace=[np.nan], value='', inplace=True)
         df_manual_P = df_manual[df_manual['Site']==center]
         df_manual_P.replace(to_replace=['CACSExtended'], value='CACS', inplace=True)
@@ -1261,7 +1263,7 @@ def createMaster():
     # Extract histograms
     #extractHist(settings)
     # Extract dicom tags
-    #extractDICOMTags(settings, NumSamples=10)
+    extractDICOMTags(settings, NumSamples=None)
     # Create tables
     checkTables(settings)
     # Create data
@@ -1291,3 +1293,5 @@ def createMaster():
     # Format master
     formatMaster(settings)
 
+
+#d = pd.read_pickle('H:/cloud/cloud_data/Projects/DISCHARGEMaster/data/discharge_master/discharge_master_01092020/discharge_components_01092020/discharge_data_01092020.pkl')
