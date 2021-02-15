@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from discharge_ncs import discharge_ncs
 from computeCTA import computeCTA
-from reco.reco_filter import RecoFilter
+#from reco.reco_filter import RecoFilter
 
 def isNaN(num):
     return num != num

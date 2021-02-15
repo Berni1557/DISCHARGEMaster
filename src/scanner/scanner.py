@@ -17,7 +17,7 @@ def highlight_columns(sheet, columns=[], color='A5A5A5', offset=2):
 
 # Read discharge data
 filepath = 'H:/cloud/cloud_data/Projects/CACSFilter/data/scanner/discharge_all_10062020.xlsx'
-filepath_scanner = 'H:/cloud/cloud_data/Projects/CACSFilter/data/scanner/scanner_10062020.xlsx'
+filepath_scanner = 'H:/cloud/cloud_data/Projects/DISCHARGEMaster/src/scanner/data/scanner_13022021.xlsx'
 df_discharge = pd.read_excel(filepath, 'linear')
 df_discharge.replace(to_replace=[np.nan], value='', inplace=True)
 
@@ -32,8 +32,8 @@ for index, study in enumerate(StudyInstanceUIDList):
     print('index', index)
     df_study = df_discharge[df_discharge['StudyInstanceUID']==study]
     site = df_study['Site'].iloc[0]
-    # if study=='1.3.12.2.1107.5.1.4.96509.30000018111906104567300000013':
-    #     sys.exit()
+    if study=='1.2.840.113619.6.95.31.0.3.4.1.1018.13.11319894':
+        sys.exit()
     
     modalities = list(df_study['Modality'].unique())
     modalities_str = ','.join(modalities)

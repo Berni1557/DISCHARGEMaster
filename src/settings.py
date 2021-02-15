@@ -31,6 +31,9 @@ def initSettings():
     settings['columns_tracking'] = ['ProblemID', 'Site', 'PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'Problem Summary',
                                     'Problem', 'Date of Query', 'Date of the change/sending', 
                                     'Results', 'Answer from the site', 'Status', 'Responsible Person']
+    settings['centers'] = ['P01', 'P02', 'P04', 'P05', 'P06', 'P07', 'P08',
+                           'P09', 'P10', 'P11', 'P12', 'P13', 'P14', 'P15', 'P16',
+                           'P17', 'P18', 'P19', 'P22', 'P23', 'P29', 'P30', 'P31', 'P32', 'P33', 'P36']  
     return settings
 
 
@@ -66,6 +69,7 @@ def fillSettingsTags(settings):
     settings['filepath_patient'] = os.path.join(settings['folderpath_components'], 'discharge_patient_' + settings['date'] + '.pkl')
     settings['folderpath_manual_selection'] = os.path.join(settings['folderpath_master_date'], 'discharge_manual_selection_' + settings['date'])
     settings['filepath_patient_conf'] = os.path.join(settings['folderpath_components'], 'discharge_patient_conf_' + settings['date'] + '.xlsx')
+    settings['filepath_reco'] = os.path.join(settings['folderpath_components'], 'discharge_reco_' + settings['date'] + '.pkl')
     
     os.makedirs(settings['folderpath_master_date'], exist_ok=True)
     os.makedirs(settings['folderpath_sources'], exist_ok=True)

@@ -29,6 +29,7 @@ from settings import initSettings, saveSettings, loadSettings, fillSettingsTags
 from classification import createRFClassification, initRFClassification, classifieRFClassification
 from filterTenStepsGuide import filter_CACS_10StepsGuide, filter_CACS, filter_NCS, filterReconstruction, filter_CTA, filer10StepsGuide, filterReconstructionRF
 from discharge_extract import extractDICOMTags
+from reco.reco_filter import RecoFilter
 
 patient_status = ['OK', 'EXCLUDED', 'MISSING_CACS', 'MISSING_CTA', 'MISSING_NC_CACS', 'MISSING_NC_CTA']
 patient_status_manual = ['OK', 'EXCLUDED', 'UNDEFINED', 'INPROGRESS']
@@ -1119,9 +1120,7 @@ def extractHist(settings):
                 sys.exit()
             StudyInstanceUID=row['StudyInstanceUID']
             PatientID=row['PatientID']
-            SeriesInstanceUID=row['SeriesInstanceUID']
-            #SOPInstanceUID=row['SOPInstanceUID']
-
+            SeriesInstanceUID=row['SeriesInstanceUID']    
             if not (row['Modality']=='CT' or row['Modality']=='OT'):
                 print('Series modality is not CT')
                 dfHist.loc[index,'SeriesInstanceUID'] = SeriesInstanceUID
@@ -1162,11 +1161,19 @@ def mergeManualSelection(settings):
     # Extract manual files
     centers = defaultdict(lambda:None, {})
     filepath_manual = glob(discharge_manual_selection + '/*.xlsx')
+    
+    # Check PALL file
     for file in filepath_manual:
-        filesplit = file[0:-5].split("_")
-        for st in filesplit:
-            if st[0]=='P' and len(st)==3:
-                centers[st] = file
+        if 'PALL' in file:
+            for c in settings['centers']:
+                centers[c] = file
+    
+    if len(centers)==0:
+        for file in filepath_manual:
+            filesplit = file[0:-5].split("_")
+            for st in filesplit:
+                if st[0]=='P' and len(st)==3:
+                    centers[st] = file
 
     
     # Update master for each center
@@ -1261,9 +1268,9 @@ def createMaster():
     settings = fillSettingsTags(loadSettings(filepath_settings))
     
     # Extract histograms
-    #extractHist(settings)
+    extractHist(settings)
     # Extract dicom tags
-    extractDICOMTags(settings, NumSamples=None)
+    #extractDICOMTags(settings, NumSamples=None)
     # Create tables
     checkTables(settings)
     # Create data
@@ -1292,6 +1299,64 @@ def createMaster():
     createStudy(settings)
     # Format master
     formatMaster(settings)
-
-
-#d = pd.read_pickle('H:/cloud/cloud_data/Projects/DISCHARGEMaster/data/discharge_master/discharge_master_01092020/discharge_components_01092020/discharge_data_01092020.pkl')
+    
+    
+    
+    # settings['filepath_sn'] = 'H:/cloud/cloud_data/Projects/DISCHARGEMaster/src/reco/sn.pkl'
+    # filt = RecoFilter()
+    # filt.extractSignalToNoise(settings, NumSamples=[0,1000])
+    
+    
+    # clf, confidence, C, ACC, pred = filt.trainNoiseTree(settings)
+    
+    # dfSN = pd.read_pickle(settings['filepath_sn'])
+    
+    
+    
+    
+    # df_master = pd.read_excel(settings['filepath_master'], sheet_name = 'MASTER' + '_' + settings['date'], index_col=0)
+    # df_cacs = df_master[df_master['RFCClass']=='CACS']
+    
+    # patient=''
+    # numlist=[]
+    # for index, row in df_cacs.iterrows():
+    #     if p==row['PatientID']:
+    #         num=num+1
+    #     else:
+    #         numlist.append(num)
+    #         num=1
+    #         p=row['PatientID']
+    
+    
+    # PatientID = '01-BER-0012'
+    # StudyInstanceUID = '1.2.840.113619.6.95.31.0.3.4.1.1018.13.10329788'
+    # SeriesInstanceUID = '1.2.392.200036.9116.2.6.1.37.2426555318.1461798187.314816'
+    # patient = CTPatient(StudyInstanceUID, PatientID)
+    # series2 = patient.loadSeries(settings['folderpath_discharge'], SeriesInstanceUID, None)
+    # image0 = series2.image
+    # s0 = image0.image()[25,:,:]
+    # r0=s0[200:250,250:300]
+    # m0=np.mean(r0)  
+    # s0=np.std(r0)
+    # sn0=m0/s0
+    
+    # feature0 = self.sgnalToNoise(image0) 
+    
+    
+    
+    # PatientID = '01-BER-0014'
+    # StudyInstanceUID = '1.2.840.113619.6.95.31.0.3.4.1.1018.13.10347678'
+    # SeriesInstanceUID = '1.2.392.200036.9116.2.6.1.37.2426555318.1462922209.252410'
+    # patient = CTPatient(StudyInstanceUID, PatientID)
+    # series1 = patient.loadSeries(settings['folderpath_discharge'], SeriesInstanceUID, None)
+    # image1 = series1.image
+    # s1 = image1.image()[25,:,:]
+    # r1=s1[200:250,250:300]
+    # m1=np.mean(r1)  
+    # s1=np.std(r1)
+    # sn1=m1/s1
+    
+    # feature1 = self.sgnalToNoise(image1) 
+    
+    
+    

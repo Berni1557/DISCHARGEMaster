@@ -22,6 +22,21 @@ def computeSliceSpacing(alldcm):
     
     return SliceSpacing
 
+def countSeriesInstanceUIDs(settings, NumSamples=None):
+    
+    root = settings['folderpath_discharge']
+    study_uids = os.listdir(root)
+    if NumSamples is None:
+        NumSamples = len(study_uids)
+    study_uids = study_uids[0:NumSamples]
+    
+    NumSeriesInstanceUIDs = 0
+    for istudy, study_uid in enumerate(study_uids):              
+        print(istudy, study_uid)
+        series_uids = os.listdir(os.path.join(root, study_uid))
+        NumSeriesInstanceUIDs = NumSeriesInstanceUIDs + len(series_uids)
+    return NumSeriesInstanceUIDs
+    
 def extractDICOMTags(settings, NumSamples=None):
 
     root = settings['folderpath_discharge']
