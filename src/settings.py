@@ -70,6 +70,7 @@ def fillSettingsTags(settings):
     settings['folderpath_manual_selection'] = os.path.join(settings['folderpath_master_date'], 'discharge_manual_selection_' + settings['date'])
     settings['filepath_patient_conf'] = os.path.join(settings['folderpath_components'], 'discharge_patient_conf_' + settings['date'] + '.xlsx')
     settings['filepath_reco'] = os.path.join(settings['folderpath_components'], 'discharge_reco_' + settings['date'] + '.pkl')
+    settings['filepath_reco_pred'] = os.path.join(settings['folderpath_components'], 'discharge_reco_pred_' + settings['date'] + '.xlsx')
     
     os.makedirs(settings['folderpath_master_date'], exist_ok=True)
     os.makedirs(settings['folderpath_sources'], exist_ok=True)

@@ -29,7 +29,8 @@ from settings import initSettings, saveSettings, loadSettings, fillSettingsTags
 from classification import createRFClassification, initRFClassification, classifieRFClassification
 from filterTenStepsGuide import filter_CACS_10StepsGuide, filter_CACS, filter_NCS, filterReconstruction, filter_CTA, filer10StepsGuide, filterReconstructionRF
 from discharge_extract import extractDICOMTags
-from reco.reco_filter import RecoFilter
+from tqdm import tqdm
+#from reco.reco_filter import RecoFilter
 
 patient_status = ['OK', 'EXCLUDED', 'MISSING_CACS', 'MISSING_CTA', 'MISSING_NC_CACS', 'MISSING_NC_CTA']
 patient_status_manual = ['OK', 'EXCLUDED', 'UNDEFINED', 'INPROGRESS']
@@ -623,18 +624,18 @@ def mergeMaster(settings):
     df_pred = pd.read_pickle(settings['filepath_prediction'])
     df_pred['CTA'] = df_pred['CTA'].astype('bool')
     print('Read discharge_reco')
-    #df_reco_load = pd.read_excel(filepath_reco, index_col=0)
-    #df_reco = pd.DataFrame()
-    #df_reco['RFRECO'] = df_reco_load['RFRECO']
-    #df_reco['RFRECO'] = ''
+    df_reco_load = pd.read_excel(settings['filepath_reco'], index_col=0)
+    df_reco = pd.DataFrame()
+    df_reco['RECO'] = df_reco_load['PredClass']
+    df_reco['RECO_PROP'] = df_reco_load['Prop']
     print('Read discharge_rfc')
     df_rfc = pd.read_pickle(settings['filepath_rfc'])
     print('Read discharge_manual')
     df_manual = pd.read_pickle(settings['filepath_manual'])
     print('Read discharge_track')
     print('Create discharge_master')
-    #df_master = pd.concat([df_data, df_pred, df_rfc, df_manual, df_reco], axis=1)
-    df_master = pd.concat([df_data, df_pred, df_rfc, df_manual], axis=1)
+    df_master = pd.concat([df_data, df_pred, df_rfc, df_manual, df_reco], axis=1)
+    #df_master = pd.concat([df_data, df_pred, df_rfc, df_manual], axis=1)
     writer = pd.ExcelWriter(settings['filepath_master'], engine="openpyxl", mode="w")
     df_master.to_excel(writer, sheet_name = 'MASTER' + '_' + settings['date'])
     # Add patient data
@@ -1112,8 +1113,12 @@ def extractHist(settings):
     start = 0
     end = len(df)
     #end = 1200
+    print('Press "ctrl + e" to stop execution.')
+    pbar = tqdm(total=len(df))
+    pbar.set_description("Extract histograms")
     for index, row in df[start:end].iterrows():
-        print('index', index)   
+        #print('index', index)   
+        pbar.update(1)
         if dfHist.iloc[index,0]=='':
             if keyboard.is_pressed('ctrl+e'):
                 print('Button "ctrl + e" pressed to exit execution.')
@@ -1145,6 +1150,7 @@ def extractHist(settings):
                     dfHist.iloc[index,3:] = np.ones((1, bins))*-1
         if index % 10 == 0:
             dfHist.to_pickle(settings['filepath_hist'])
+    pbar.close()
     dfHist.to_pickle(settings['filepath_hist'])
 
 def mergeManualSelection(settings):
@@ -1267,7 +1273,7 @@ def createMaster():
     saveSettings(settings, filepath_settings)
     settings = fillSettingsTags(loadSettings(filepath_settings))
     
-    # Extract histograms
+    # ExtracextractHistt histograms
     extractHist(settings)
     # Extract dicom tags
     #extractDICOMTags(settings, NumSamples=None)
@@ -1300,7 +1306,7 @@ def createMaster():
     # Format master
     formatMaster(settings)
     
-    
+    #df_reco_load = pd.read_excel('H:/cloud/cloud_data/Projects/DISCHARGEMaster/data/discharge_master/discharge_master_01092020/discharge_components_01092020/discharge_reco_pred_01092020.xlsx')
     
     # settings['filepath_sn'] = 'H:/cloud/cloud_data/Projects/DISCHARGEMaster/src/reco/sn.pkl'
     # filt = RecoFilter()
@@ -1358,5 +1364,50 @@ def createMaster():
     
     # feature1 = self.sgnalToNoise(image1) 
     
+    # Load data
+    df_hist = pd.read_pickle('H:/cloud/cloud_data/Projects/DISCHARGEMaster/data/discharge_master/discharge_master_01092020/discharge_sources_01092020/discharge_hist_01092020.pkl')
+    columns = [str(i) for i in range(100)]
     
+    # Filter  empty arrays
+    df_col = df_hist[columns]
+    idx_empty = df_col['0']>-1
+    df_filt0 = df_col[idx_empty]
+    df_hist0 = df_hist[idx_empty]
     
+    # Filter dublicates
+    idx_dub = df_filt0.duplicated(keep=False)
+    df_hist1 = df_hist0[idx_dub]
+    
+    # Extract dublicates
+    pbar = tqdm(total=len(df_hist1))
+    pbar.set_description("Extract dublicates")
+    df_dublicates = pd.DataFrame(columns=['SeriesInstanceUID', 'dublicates'])
+    for index0, row0 in df_hist1.iterrows():
+        pbar.update(1)
+        c0 = list(row0[columns])
+        dub_list=[]
+        for index1, row1 in df_hist1.iterrows():
+            if row0['SeriesInstanceUID']!=row1['SeriesInstanceUID']:
+                c1 = list(row1[columns])
+                if c0==c1:
+                    dub_list.append(row1['SeriesInstanceUID'])
+        if len(dub_list)>0:
+            df_dublicates = df_dublicates.append(dict({'SeriesInstanceUID': row0['SeriesInstanceUID'], 'dublicates': dub_list}), ignore_index=True)
+    pbar.close()
+    dfHist.to_pickle(settings['filepath_hist'])
+                
+                
+                
+                
+                
+    #         c1 = list(row1[columns])
+    #         if row['SeriesInstanceUID']=='1.2.40.0.13.1.109250245863884995619126169614607621221':
+    #             row0 = row
+    #         if row['SeriesInstanceUID']=='1.2.40.0.13.1.53338717653213650310124647000719089661':
+    #             row1 = row
+            
+            
+            
+            
+            
+            

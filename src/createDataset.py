@@ -23,10 +23,12 @@ from openpyxl.formatting import Rule
 from settings import initSettings, saveSettings, loadSettings, fillSettingsTags
 from classification import createRFClassification, initRFClassification, classifieRFClassification
 from filterTenStepsGuide import filter_CACS_10StepsGuide, filter_CACS, filter_NCS, filterReconstruction, filter_CTA, filer10StepsGuide, filterReconstructionRF
-from CTDataStruct import CTPatient, CTImage
+from CTDataStruct import CTPatient, CTImage, CTRef
 import SimpleITK as sitk
 import matplotlib.pyplot as plt
-
+from glob import glob
+   
+    
 def splitFilePath(filepath):
     """ Split filepath into folderpath, filename and file extension
     
@@ -37,6 +39,23 @@ def splitFilePath(filepath):
     head, file_extension = os.path.splitext(filepath)
     folderpath, filename = ntpath.split(head)
     return folderpath, filename, file_extension
+
+def checkRefereencesAL():
+    fp = 'H:/cloud/cloud_data/Projects/DISCHARGEMaster/datasets/CACS_20210801_XA/References/'
+    files = glob(fp + '*-label.nrrd')
+    filenameList=[]
+    ratioList=[]
+    for i,fip in enumerate(files):
+        print(i)
+        _, filename, _ = splitFilePath(fip)
+        ref = CTRef()
+        ref.load(fip)
+        N=ref.ref().shape[0]*ref.ref().shape[1]*ref.ref().shape[2]
+        Nr=(ref.ref()!=0).sum()
+        ratio = Nr / N
+        filenameList.append(filename)
+        ratioList.append(ratio)
+
 
 def createCACS(settings, name, folderpath, createPreview, createDatasetFromPreview, NumSamples=None):
     
